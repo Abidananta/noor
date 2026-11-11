@@ -103,18 +103,19 @@ class _UpdatePageState extends State<UpdatePage> with TickerProviderStateMixin {
       if (res.statusCode != 200) throw HttpException('HTTP ${res.statusCode}');
       if (res.contentLength > 0) _total = res.contentLength;
 
-      sink = file.openWrite();
+      final out = file.openWrite();
+      sink = out;
       var lastUi = DateTime.now();
       await for (final chunk in res) {
         if (myId != _dlId || !mounted) {
-          await sink.close();
+          await out.close();
           sink = null;
           try {
             await file.delete();
           } catch (_) {}
           return;
         }
-        sink.add(chunk);
+        out.add(chunk);
         _got += chunk.length;
         final now = DateTime.now();
         if (now.difference(lastUi).inMilliseconds > 80) {
@@ -122,8 +123,8 @@ class _UpdatePageState extends State<UpdatePage> with TickerProviderStateMixin {
           if (mounted) setState(() {});
         }
       }
-      await sink.flush();
-      await sink.close();
+      await out.flush();
+      await out.close();
       sink = null;
       if (!mounted) return;
       setState(() {
