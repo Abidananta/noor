@@ -44,6 +44,12 @@ jobs:
           sed -i 's|<application|<uses-permission android:name="android.permission.INTERNET"/>\n    <application|' android/app/src/main/AndroidManifest.xml
           grep -n "INTERNET" android/app/src/main/AndroidManifest.xml
 
+      # In-app update installs the downloaded APK
+      - name: Add install-packages permission
+        run: |
+          sed -i 's|<application|<uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>\n    <application|' android/app/src/main/AndroidManifest.xml
+          grep -n "REQUEST_INSTALL_PACKAGES" android/app/src/main/AndroidManifest.xml
+
       # Let the app open https links and the mail app (Contact us / Update)
       - name: Add package visibility queries
         run: |
@@ -72,6 +78,19 @@ jobs:
 
       - run: flutter pub get
 
+      # App icon on the home screen / app drawer (assets/icon/*.png)
+      - name: Generate launcher icons
+        run: dart run flutter_launcher_icons
+
+      # Name shown under the icon + dark launch background (no white flash)
+      - name: App name and launch background
+        run: |
+          sed -i 's|android:label="[^"]*"|android:label="Noor"|' android/app/src/main/AndroidManifest.xml
+          for f in $(find android/app/src/main/res -name launch_background.xml); do
+            sed -i 's|@android:color/white|#052A21|' "$f"
+          done
+          grep -n 'android:label' android/app/src/main/AndroidManifest.xml
+
       - name: Read app version from pubspec.yaml
         id: ver
         run: |
@@ -79,7 +98,7 @@ jobs:
           echo "full=$FULL" >> "$GITHUB_OUTPUT"
           echo "short=${FULL%%+*}" >> "$GITHUB_OUTPUT"
 
-      - run: flutter build apk --release --dart-define=APP_VERSION=${{ steps.ver.outputs.full }}
+      - run: flutter build apk --release --dart-define=APP_VERSION=${{ steps.ver.outputs.full }} --dart-define=UPDATE_REPO=${{ github.repository }}
 
       - uses: actions/upload-artifact@v4
         with:
