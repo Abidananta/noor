@@ -5,6 +5,7 @@ import '../quran/models.dart';
 import '../quran/quran_audio.dart';
 import '../quran/reader_screen.dart';
 import 'history_screen.dart';
+import '../player/global_player.dart' show QuranPlayerDock;
 import '../ui/glass.dart';
 import 'common.dart';
 
@@ -51,7 +52,17 @@ class _TilawatScreenState extends State<TilawatScreen> {
   Widget build(BuildContext context) {
     return GlassPage(
       title: tr('f_tilawat'),
-      body: FutureBuilder<List<Surah>>(
+      body: Column(
+        children: [
+          Expanded(child: _content()),
+          const QuranPlayerDock(),
+        ],
+      ),
+    );
+  }
+
+  Widget _content() {
+    return FutureBuilder<List<Surah>>(
         future: _future,
         builder: (context, snap) {
           if (snap.hasError) return Center(child: Text('লোড করা যায়নি: ${snap.error}'));
@@ -188,7 +199,6 @@ class _TilawatScreenState extends State<TilawatScreen> {
             },
           );
         },
-      ),
     );
   }
 }

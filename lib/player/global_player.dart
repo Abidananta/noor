@@ -35,41 +35,39 @@ final ValueNotifier<bool> onRootPage = ValueNotifier<bool>(true);
 /// Lets [RootScreen] tell [onRootPage] when another page is opened over it.
 final RouteObserver<PageRoute<dynamic>> rootRouteObserver = RouteObserver<PageRoute<dynamic>>();
 
-/// Wraps the whole app, so the same small player shows on every page while
-/// audio is playing (and the pages above it simply get a bit shorter).
+/// Wraps the whole app (background only). The audio player is NOT drawn
+/// here any more: it lives inside the Gazal and Tilawat pages only, through
+/// [GazalPlayerDock] and [QuranPlayerDock].
 class PlayerHost extends StatelessWidget {
   final Widget child;
   const PlayerHost({super.key, required this.child});
 
   @override
+  Widget build(BuildContext context) => GlassBackground(child: child);
+}
+
+/// Player shown at the bottom of the Gazal page while a gazal is loaded.
+class GazalPlayerDock extends StatelessWidget {
+  const GazalPlayerDock({super.key});
+
+  @override
   Widget build(BuildContext context) {
-    return GlassBackground(
-      child: AnimatedBuilder(
-        animation: Listenable.merge([playerChanges, onRootPage]),
-        builder: (context, _) {
-          final src = onRootPage.value ? _Src.none : _active();
-          return Column(
-            children: [
-              Expanded(
-                // Same widget types in both cases, so the pages keep their state.
-                child: MediaQuery.removePadding(
-                  context: context,
-                  removeBottom: src != _Src.none,
-                  child: child,
-                ),
-              ),
-              if (src != _Src.none)
-                Material(
-                  type: MaterialType.transparency,
-                  child: SafeArea(
-                    top: false,
-                    child: src == _Src.quran ? const _QuranBar() : const _GazalBar(),
-                  ),
-                ),
-            ],
-          );
-        },
-      ),
+    return Material(
+      type: MaterialType.transparency,
+      child: SafeArea(top: false, child: const _GazalBar()),
+    );
+  }
+}
+
+/// Player shown at the bottom of the Tilawat page while a surah is loaded.
+class QuranPlayerDock extends StatelessWidget {
+  const QuranPlayerDock({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      type: MaterialType.transparency,
+      child: SafeArea(top: false, child: const _QuranBar()),
     );
   }
 }
@@ -133,11 +131,30 @@ class _BarView extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(title,
-                maxLines: 1,
-                textAlign: TextAlign.center,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+            Row(
+              children: [
+                const SizedBox(width: 32),
+                Expanded(
+                  child: Text(title,
+                      maxLines: 1,
+                      textAlign: TextAlign.center,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                ),
+                SizedBox(
+                  width: 32,
+                  height: 32,
+                  child: IconButton(
+                    tooltip: 'বন্ধ করুন',
+                    padding: EdgeInsets.zero,
+                    iconSize: 22,
+                    color: wh(.8),
+                    icon: const Icon(Icons.close_rounded),
+                    onPressed: onClose,
+                  ),
+                ),
+              ],
+            ),
             if (error != null)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 10),
@@ -146,26 +163,14 @@ class _BarView extends StatelessWidget {
                     style: const TextStyle(fontSize: 12.5, color: Color(0xFFF87171))),
               )
             else
-              SliderTheme(
-                data: SliderTheme.of(context).copyWith(
-                  trackHeight: 4,
-                  activeTrackColor: kGold,
-                  inactiveTrackColor: const Color(0xFF263535),
-                  thumbColor: kGold,
-                  thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 9),
-                  overlayShape: const RoundSliderOverlayShape(overlayRadius: 16),
-                  trackShape: const RoundedRectSliderTrackShape(),
-                  tickMarkShape: SliderTickMarkShape.noTickMark,
-                ),
-                child: SizedBox(
-                  height: 34,
-                  child: Slider(
-                    value: posMs,
-                    max: maxMs,
-                    onChangeStart: (_) => onSeekStart(),
-                    onChanged: (v) => onSeek(Duration(milliseconds: v.round())),
-                    onChangeEnd: (v) => onSeekEnd(Duration(milliseconds: v.round())),
-                  ),
+              SizedBox(
+                height: 34,
+                child: _SeekBar(
+                  value: posMs,
+                  max: maxMs,
+                  onStart: onSeekStart,
+                  onChanged: (v) => onSeek(Duration(milliseconds: v.round())),
+                  onEnd: (v) => onSeekEnd(Duration(milliseconds: v.round())),
                 ),
               ),
             Row(
@@ -223,6 +228,98 @@ class _BarView extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Seek bar drawn by hand (gold progress, dark track, round gold thumb, fully
+/// transparent background), so it looks the same on every Flutter version.
+class _SeekBar extends StatefulWidget {
+  final double value;
+  final double max;
+  final VoidCallback onStart;
+  final ValueChanged<double> onChanged;
+  final ValueChanged<double> onEnd;
+  const _SeekBar({
+    required this.value,
+    required this.max,
+    required this.onStart,
+    required this.onChanged,
+    required this.onEnd,
+  });
+
+  @override
+  State<_SeekBar> createState() => _SeekBarState();
+}
+
+class _SeekBarState extends State<_SeekBar> {
+  static const double _pad = 10; // room for the thumb at both ends
+  double _last = 0;
+
+  double _toValue(double dx, double width) {
+    final track = width - _pad * 2;
+    if (track <= 0) return 0;
+    return ((dx - _pad) / track).clamp(0.0, 1.0) * widget.max;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, c) {
+        final w = c.maxWidth;
+        final frac = widget.max <= 0 ? 0.0 : (widget.value / widget.max).clamp(0.0, 1.0);
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTapUp: (d) {
+            final v = _toValue(d.localPosition.dx, w);
+            widget.onStart();
+            widget.onChanged(v);
+            widget.onEnd(v);
+          },
+          onHorizontalDragStart: (d) {
+            widget.onStart();
+            _last = _toValue(d.localPosition.dx, w);
+            widget.onChanged(_last);
+          },
+          onHorizontalDragUpdate: (d) {
+            _last = _toValue(d.localPosition.dx, w);
+            widget.onChanged(_last);
+          },
+          onHorizontalDragEnd: (_) => widget.onEnd(_last),
+          onHorizontalDragCancel: () => widget.onEnd(_last),
+          child: CustomPaint(
+            size: Size(w, 34),
+            painter: _SeekPainter(frac, _pad),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _SeekPainter extends CustomPainter {
+  final double frac;
+  final double pad;
+  _SeekPainter(this.frac, this.pad);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final cy = size.height / 2;
+    final left = pad;
+    final right = size.width - pad;
+    final x = left + (right - left) * frac;
+    const h = 4.0;
+    final inactive = Paint()..color = const Color(0xFF263535);
+    final active = Paint()..color = kGold;
+    canvas.drawRRect(
+        RRect.fromLTRBR(left, cy - h / 2, right, cy + h / 2, const Radius.circular(h / 2)),
+        inactive);
+    canvas.drawRRect(
+        RRect.fromLTRBR(left, cy - h / 2, x, cy + h / 2, const Radius.circular(h / 2)),
+        active);
+    canvas.drawCircle(Offset(x, cy), 9, active);
+  }
+
+  @override
+  bool shouldRepaint(_SeekPainter o) => o.frac != frac || o.pad != pad;
 }
 
 // ---------------- Quran ----------------

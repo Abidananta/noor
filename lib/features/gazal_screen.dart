@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
+import '../player/global_player.dart' show GazalPlayerDock;
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -292,6 +293,7 @@ class _GazalScreenState extends State<GazalScreen> with WidgetsBindingObserver {
                         itemBuilder: (_, i) => _tile(all[i], all),
                       ),
           ),
+          const GazalPlayerDock(),
         ],
       ),
     );
