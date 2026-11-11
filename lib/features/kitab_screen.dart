@@ -5,6 +5,7 @@ import '../ui/glass.dart';
 import 'common.dart';
 import 'kitab_data.dart';
 import 'kitab_reader.dart';
+import 'online_kitab_screen.dart';
 
 const _statusLabels = ['তালিকায়', 'পড়তে চাই', 'পড়ছি', 'শেষ করেছি'];
 const _statusIcons = [
@@ -92,11 +93,47 @@ class _KitabScreenState extends State<KitabScreen> with WidgetsBindingObserver {
     }
   }
 
+  void _openOnline() => Navigator.push(
+      context, MaterialPageRoute(builder: (_) => const OnlineKitabScreen()));
+
+  Widget _onlineCard() => GlassCard(
+        blur: 0,
+        radius: 18,
+        opacity: 0.16,
+        tint: kGold,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+        onTap: _openOnline,
+        child: Row(
+          children: [
+            const Icon(Icons.travel_explore_rounded, color: kGold, size: 30),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('ইন্টারনেট থেকে কিতাব খুঁজুন',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 2),
+                  Text('হাজারো ইসলামী বই (PDF) — ট্যাপ করে সরাসরি পড়ুন',
+                      style: TextStyle(fontSize: 12.5, color: wh(.75))),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right_rounded, color: wh(.7)),
+          ],
+        ),
+      );
+
   @override
   Widget build(BuildContext context) {
     return GlassPage(
       title: tr('f_kitab'),
       actions: [
+        IconButton(
+          tooltip: 'অনলাইন কিতাব',
+          icon: const Icon(Icons.travel_explore_rounded),
+          onPressed: _openOnline,
+        ),
         if (_syncing)
           const Padding(
             padding: EdgeInsets.only(right: 16),
@@ -127,15 +164,19 @@ class _KitabScreenState extends State<KitabScreen> with WidgetsBindingObserver {
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 15, height: 1.5, color: wh(.8)),
           ),
+          const SizedBox(height: 24),
+          _onlineCard(),
         ],
       );
     }
     return ListView.separated(
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(16, 6, 16, 24),
-      itemCount: _books.length + 1,
+      itemCount: _books.length + 2,
       separatorBuilder: (_, __) => const SizedBox(height: 10),
       itemBuilder: (_, i) {
+        if (i == 0) return _onlineCard();
+        i -= 1;
         if (i == _books.length) {
           return FootNote(_offline
               ? 'অফলাইন — আগের তালিকা দেখানো হচ্ছে।'

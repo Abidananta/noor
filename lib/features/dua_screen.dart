@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../ui/glass.dart';
 import 'common.dart';
+import 'online_content.dart';
 
 class _Dua {
   final String cat;
@@ -68,6 +69,21 @@ const _duas = <_Dua>[
       'সূরা আলে ইমরান ৩:৮'),
 ];
 
+/// Random Quranic duas from the internet; the built-in list is the offline fallback.
+final RandomSource _duaSource = RandomSource(
+  kind: 'dua',
+  fetchOne: fetchRandomDua,
+  fallback: [
+    for (var i = 0; i < _duas.length; i++)
+      RItem(
+          id: 'db:$i',
+          title: _duas[i].title,
+          arabic: _duas[i].arabic,
+          text: _duas[i].meaning,
+          source: _duas[i].source),
+  ],
+);
+
 class DuaScreen extends StatefulWidget {
   const DuaScreen({super.key});
 
@@ -104,9 +120,14 @@ class _DuaScreenState extends State<DuaScreen> {
           Expanded(
             child: ListView.separated(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-              itemCount: list.length + 1,
+              itemCount: list.length + 2,
               separatorBuilder: (_, __) => const SizedBox(height: 12),
               itemBuilder: (context, i) {
+                if (i == 0) {
+                  return RandomReader(
+                      source: _duaSource, heading: "ইন্টারনেট থেকে র‍্যান্ডম দু'আ");
+                }
+                i -= 1;
                 if (i == list.length) {
                   return const FootNote(
                       'আরবি পাঠ ও উচ্চারণ ভালোভাবে শিখে নিতে একজন যোগ্য উস্তাদের সাহায্য নিন।');

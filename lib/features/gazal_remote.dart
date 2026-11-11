@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../config.dart';
+import '../github_list.dart';
 
 /// One online audio file.
 class RemoteItem {
@@ -132,41 +133,12 @@ class GazalRemote {
   // ---------------- GitHub ----------------
 
   static Future<List<RemoteItem>> _github(String input) async {
-    var t = input.trim().replaceAll(RegExp(r'^https?://(www\.)?github\.com/'), '');
-    t = t.replaceAll(RegExp(r'^/+|/+$'), '');
-    final parts = t.split('/').where((e) => e.isNotEmpty).toList();
-    if (parts.length < 2) throw const FormatException('repo');
-    final owner = parts[0];
-    final repo = parts[1].replaceAll(RegExp(r'\.git$'), '');
-
-    String? ref;
-    var rest = parts.skip(2).toList();
-    if (rest.length >= 2 && rest[0] == 'tree') {
-      ref = rest[1];
-      rest = rest.skip(2).toList();
-    }
-    final folder = rest.isEmpty ? kGazalDefaultFolder : rest.join('/');
-
-    final uri = Uri.https(
-      'api.github.com',
-      '/repos/$owner/$repo/contents/$folder',
-      ref == null ? null : {'ref': ref},
-    );
-    final data = await _getJson(uri, headers: {
-      'Accept': 'application/vnd.github+json',
-      'User-Agent': 'noor-app',
-    });
-    if (data is! List) throw const FormatException('folder');
-
-    final out = <RemoteItem>[];
-    for (final e in data) {
-      if (e is! Map) continue;
-      final name = e['name'];
-      final url = e['download_url'];
-      if (e['type'] == 'file' && name is String && url is String && _isAudio(name)) {
-        out.add(RemoteItem(_titleOf(name), url));
-      }
-    }
+    final files = await listGithubFolder(input, defaultFolder: kGazalDefaultFolder);
+    final out = <RemoteItem>[
+      for (final f in files)
+        if (_isAudio(f.name)) RemoteItem(_titleOf(f.name), f.url),
+    ];
+    out.sort((a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()));
     return out;
   }
 

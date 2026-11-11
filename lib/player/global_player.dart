@@ -114,128 +114,108 @@ class _BarView extends StatelessWidget {
   Widget build(BuildContext context) {
     final maxMs = dur.inMilliseconds < 1 ? 1.0 : dur.inMilliseconds.toDouble();
     final posMs = pos.inMilliseconds.clamp(0, maxMs.toInt()).toDouble();
+    // Same look as the gazal player (glass card, title, seek bar,
+    // time | prev play next | time) - only with tighter spacing.
     return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
       child: GlassCard(
-        blur: 14,
-        radius: 22,
-        opacity: 0.12,
-        padding: const EdgeInsets.fromLTRB(14, 4, 4, 2),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
+        blur: 16,
+        radius: 24,
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 2),
+        child: Stack(
           children: [
-            Row(
+            Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Expanded(
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
                   child: Text(title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                          fontSize: 14.5, fontWeight: FontWeight.w700, height: 1.4)),
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
                 ),
-                if (arabic != null) ...[
-                  const SizedBox(width: 8),
-                  Text(arabic!,
-                      style: const TextStyle(fontSize: 17, color: kGold, height: 1.4)),
-                ],
-                IconButton(
-                  visualDensity: VisualDensity.compact,
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(minWidth: 34, minHeight: 30),
-                  iconSize: 19,
-                  icon: Icon(Icons.close_rounded, color: wh(.7)),
-                  onPressed: onClose,
+                if (error != null)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    child: Text(error!,
+                        style: const TextStyle(fontSize: 12.5, color: Color(0xFFF87171))),
+                  )
+                else
+                  SizedBox(
+                    height: 30,
+                    child: Slider(
+                      value: posMs,
+                      max: maxMs,
+                      activeColor: kGold,
+                      onChangeStart: (_) => onSeekStart(),
+                      onChanged: (v) => onSeek(Duration(milliseconds: v.round())),
+                      onChangeEnd: (v) => onSeekEnd(Duration(milliseconds: v.round())),
+                    ),
+                  ),
+                Row(
+                  children: [
+                    Text(_fmt(pos), style: TextStyle(fontSize: 12, color: wh(.7))),
+                    const Spacer(),
+                    IconButton(
+                      iconSize: 32,
+                      visualDensity: VisualDensity.compact,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(minWidth: 44, minHeight: 40),
+                      icon: const Icon(Icons.skip_previous_rounded),
+                      onPressed: canPrev ? onPrev : null,
+                    ),
+                    SizedBox(
+                      width: 48,
+                      height: 48,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          IconButton(
+                            iconSize: 44,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+                            color: kGold,
+                            icon: Icon(playing
+                                ? Icons.pause_circle_filled_rounded
+                                : Icons.play_circle_fill_rounded),
+                            onPressed: onPlay,
+                          ),
+                          if (loading)
+                            const IgnorePointer(
+                              child: SizedBox(
+                                width: 42,
+                                height: 42,
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2.5, color: Color(0xFF3B2A05)),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      iconSize: 32,
+                      visualDensity: VisualDensity.compact,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(minWidth: 44, minHeight: 40),
+                      icon: const Icon(Icons.skip_next_rounded),
+                      onPressed: canNext ? onNext : null,
+                    ),
+                    const Spacer(),
+                    Text(_fmt(dur), style: TextStyle(fontSize: 12, color: wh(.7))),
+                  ],
                 ),
               ],
             ),
-            if (error != null)
-              Text(error!,
-                  style: const TextStyle(fontSize: 11.5, color: Color(0xFFF87171)))
-            else
-              Padding(
-                padding: const EdgeInsets.only(right: 10),
-                child: Row(
-                  children: [
-                    Text(_fmt(pos), style: TextStyle(fontSize: 10.5, color: wh(.7))),
-                    Expanded(
-                      child: SliderTheme(
-                        data: SliderTheme.of(context).copyWith(
-                          trackHeight: 2.5,
-                          thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 5),
-                          overlayShape: const RoundSliderOverlayShape(overlayRadius: 11),
-                          activeTrackColor: kGold,
-                          inactiveTrackColor: wh(.22),
-                          thumbColor: kGold,
-                        ),
-                        child: SizedBox(
-                          height: 24,
-                          child: Slider(
-                            value: posMs,
-                            max: maxMs,
-                            onChangeStart: (_) => onSeekStart(),
-                            onChanged: (v) => onSeek(Duration(milliseconds: v.round())),
-                            onChangeEnd: (v) =>
-                                onSeekEnd(Duration(milliseconds: v.round())),
-                          ),
-                        ),
-                      ),
-                    ),
-                    Text(_fmt(dur), style: TextStyle(fontSize: 10.5, color: wh(.7))),
-                  ],
-                ),
-              ),
-            Padding(
-              padding: const EdgeInsets.only(right: 10),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  IconButton(
-                    iconSize: 26,
-                    visualDensity: VisualDensity.compact,
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(minWidth: 40, minHeight: 36),
-                    icon: const Icon(Icons.skip_previous_rounded),
-                    onPressed: canPrev ? onPrev : null,
-                  ),
-                  const SizedBox(width: 8),
-                  SizedBox(
-                    width: 42,
-                    height: 40,
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        IconButton(
-                          iconSize: 38,
-                          padding: EdgeInsets.zero,
-                          color: kGold,
-                          icon: Icon(playing
-                              ? Icons.pause_circle_filled_rounded
-                              : Icons.play_circle_fill_rounded),
-                          onPressed: onPlay,
-                        ),
-                        if (loading)
-                          const IgnorePointer(
-                            child: SizedBox(
-                              width: 36,
-                              height: 36,
-                              child: CircularProgressIndicator(
-                                  strokeWidth: 2.5, color: Color(0xFF3B2A05)),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  IconButton(
-                    iconSize: 26,
-                    visualDensity: VisualDensity.compact,
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(minWidth: 40, minHeight: 36),
-                    icon: const Icon(Icons.skip_next_rounded),
-                    onPressed: canNext ? onNext : null,
-                  ),
-                ],
+            Positioned(
+              top: -6,
+              right: -12,
+              child: IconButton(
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                iconSize: 19,
+                icon: Icon(Icons.close_rounded, color: wh(.75)),
+                onPressed: onClose,
               ),
             ),
           ],

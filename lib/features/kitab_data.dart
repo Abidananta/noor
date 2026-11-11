@@ -1,7 +1,7 @@
 import 'dart:convert';
-import 'dart:io';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../config.dart';
+import '../github_list.dart';
 import '../i18n.dart';
 
 /// One PDF book from the GitHub `kitab/` folder.
@@ -10,10 +10,13 @@ class Book {
   final String file;
   final String url;
   final int size; // bytes, 0 = unknown
-  const Book(this.file, this.url, this.size);
+  /// Display name for books found online (GitHub books use the file name).
+  final String? label;
+  const Book(this.file, this.url, this.size, {this.label});
 
   /// Shown name: file name without `.pdf`, `_` -> space.
   String get title {
+    if (label != null && label!.trim().isNotEmpty) return label!.trim();
     final dot = file.lastIndexOf('.');
     final base = dot > 0 ? file.substring(0, dot) : file;
     return base.replaceAll('_', ' ').trim();
@@ -67,49 +70,13 @@ class KitabRemote {
   }
 
   static Future<List<Book>> _github(String input) async {
-    var t = input.trim().replaceAll(RegExp(r'^https?://(www\.)?github\.com/'), '');
-    t = t.replaceAll(RegExp(r'^/+|/+$'), '');
-    final parts = t.split('/').where((e) => e.isNotEmpty).toList();
-    if (parts.length < 2) throw const FormatException('repo');
-    final owner = parts[0];
-    final repo = parts[1].replaceAll(RegExp(r'\.git$'), '');
-    String? ref;
-    var rest = parts.skip(2).toList();
-    if (rest.length >= 2 && rest[0] == 'tree') {
-      ref = rest[1];
-      rest = rest.skip(2).toList();
-    }
-    final folder = rest.isEmpty ? 'kitab' : rest.join('/');
-
-    final uri = Uri.https('api.github.com', '/repos/$owner/$repo/contents/$folder',
-        ref == null ? null : {'ref': ref});
-    final client = HttpClient()..connectionTimeout = const Duration(seconds: 12);
-    try {
-      final req = await client.getUrl(uri).timeout(const Duration(seconds: 15));
-      req.headers.set('Accept', 'application/vnd.github+json');
-      req.headers.set('User-Agent', 'noor-app');
-      final res = await req.close().timeout(const Duration(seconds: 20));
-      final body = await res.transform(utf8.decoder).join();
-      if (res.statusCode != 200) throw HttpException('HTTP ${res.statusCode}');
-      final data = jsonDecode(body);
-      if (data is! List) throw const FormatException('folder');
-      final out = <Book>[];
-      for (final e in data) {
-        if (e is! Map) continue;
-        final name = e['name'];
-        final url = e['download_url'];
-        if (e['type'] == 'file' &&
-            name is String &&
-            url is String &&
-            name.toLowerCase().endsWith('.pdf')) {
-          out.add(Book(name, url, (e['size'] as int?) ?? 0));
-        }
-      }
-      out.sort((a, b) => a.title.compareTo(b.title));
-      return out;
-    } finally {
-      client.close(force: true);
-    }
+    final files = await listGithubFolder(input, defaultFolder: 'kitab');
+    final out = <Book>[
+      for (final f in files)
+        if (f.name.toLowerCase().endsWith('.pdf')) Book(f.name, f.url, f.size),
+    ];
+    out.sort((a, b) => a.title.compareTo(b.title));
+    return out;
   }
 }
 
@@ -122,7 +89,7 @@ class HistoryEntry {
   final int opens;
   const HistoryEntry(this.file, this.title, this.url, this.size, this.at, this.opens);
 
-  Book get book => Book(file, url, size);
+  Book get book => Book(file, url, size, label: title);
 }
 
 /// Which books were opened, newest first (shown on the profile page).

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../ui/glass.dart';
 import 'common.dart';
+import 'online_content.dart';
 
 class _Hadith {
   final String text;
@@ -35,6 +36,19 @@ const _hadiths = <_Hadith>[
       'আবদুল্লাহ ইবনু আমর (রা.)', 'বুখারী ও মুসলিম'),
 ];
 
+/// Random hadith from the internet; the built-in list above is the offline fallback.
+final RandomSource _hadithSource = RandomSource(
+  kind: 'hadith',
+  fetchOne: fetchRandomHadith,
+  fallback: [
+    for (var i = 0; i < _hadiths.length; i++)
+      RItem(
+          id: 'hb:$i',
+          text: _hadiths[i].text,
+          source: '${_hadiths[i].narrator} · ${_hadiths[i].source}'),
+  ],
+);
+
 class HadithScreen extends StatelessWidget {
   const HadithScreen({super.key});
 
@@ -44,9 +58,13 @@ class HadithScreen extends StatelessWidget {
       title: tr('f_hadith'),
       body: ListView.separated(
         padding: const EdgeInsets.fromLTRB(16, 6, 16, 24),
-        itemCount: _hadiths.length + 1,
+        itemCount: _hadiths.length + 2,
         separatorBuilder: (_, __) => const SizedBox(height: 12),
         itemBuilder: (context, i) {
+          if (i == 0) {
+            return RandomReader(source: _hadithSource, heading: 'ইন্টারনেট থেকে র‍্যান্ডম হাদীস');
+          }
+          i -= 1;
           if (i == _hadiths.length) {
             return const FootNote(
                 'হাদীসগুলোর অনুবাদ সারমর্মভিত্তিক। বিস্তারিত ও পূর্ণ পাঠের জন্য নির্ভরযোগ্য হাদীসগ্রন্থ দেখুন।');

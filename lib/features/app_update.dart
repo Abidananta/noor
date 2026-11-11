@@ -42,7 +42,38 @@ Future<void> saveUpdateRepo(String repo) async {
 }
 
 /// Reads the latest GitHub release. Throws if it cannot be reached.
+/// If api.github.com does not answer (blocked / request limit used up), the
+/// public release page redirect is used instead.
 Future<UpdateInfo> fetchLatestRelease(String repo) async {
+  try {
+    return await _fetchViaApi(repo);
+  } catch (_) {
+    return _fetchViaRedirect(repo);
+  }
+}
+
+Future<UpdateInfo> _fetchViaRedirect(String repo) async {
+  final client = HttpClient()..connectionTimeout = const Duration(seconds: 10);
+  try {
+    final req = await client.getUrl(Uri.parse('https://github.com/$repo/releases/latest'));
+    req.followRedirects = false;
+    req.headers.set('User-Agent', 'noor-app');
+    final res = await req.close().timeout(const Duration(seconds: 12));
+    await res.drain<void>();
+    final loc = res.headers.value('location') ?? '';
+    final m = RegExp(r'/releases/tag/([^/?#]+)').firstMatch(loc);
+    if (m == null) throw const FormatException('no release');
+    final tagRaw = Uri.decodeComponent(m.group(1)!);
+    final tag = tagRaw.replaceFirst(RegExp(r'^[vV]'), '');
+    if (tag.isEmpty) throw const FormatException('no release');
+    return UpdateInfo(tag,
+        'https://github.com/$repo/releases/download/${Uri.encodeComponent(tagRaw)}/app-release.apk');
+  } finally {
+    client.close(force: true);
+  }
+}
+
+Future<UpdateInfo> _fetchViaApi(String repo) async {
   final client = HttpClient()..connectionTimeout = const Duration(seconds: 12);
   try {
     final req = await client.getUrl(Uri.parse('https://api.github.com/repos/$repo/releases/latest'));

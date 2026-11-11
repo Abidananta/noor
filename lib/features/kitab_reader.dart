@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
+import '../github_list.dart';
 import '../ui/glass.dart';
 import 'common.dart';
 import 'kitab_data.dart';
@@ -71,9 +72,26 @@ class _KitabReaderScreenState extends State<KitabReaderScreen> {
       }
 
       final tmp = File('${f.path}.part');
-      final client = HttpClient()..connectionTimeout = const Duration(seconds: 15);
-      _client = client;
-      final req = await client.getUrl(Uri.parse(widget.book.url));
+      try {
+        await _download(widget.book.url, tmp);
+      } catch (_) {
+        // raw.githubusercontent.com may not open on some networks: try jsDelivr.
+        final alt = alternateUrl(widget.book.url);
+        if (alt == null || !mounted) rethrow;
+        await _download(alt, tmp);
+      }
+      await tmp.rename(f.path);
+      if (mounted) setState(() => _file = f);
+    } catch (e) {
+      if (mounted) setState(() => _error = 'বইটি ডাউনলোড করা যায়নি। ইন্টারনেট দেখে আবার চেষ্টা করুন।');
+    }
+  }
+
+  Future<void> _download(String url, File tmp) async {
+    final client = HttpClient()..connectionTimeout = const Duration(seconds: 12);
+    _client = client;
+    try {
+      final req = await client.getUrl(Uri.parse(url));
       final res = await req.close();
       if (res.statusCode != 200) throw HttpException('HTTP ${res.statusCode}');
       final total = res.contentLength;
@@ -88,10 +106,8 @@ class _KitabReaderScreenState extends State<KitabReaderScreen> {
       } finally {
         await sink.close();
       }
-      await tmp.rename(f.path);
-      if (mounted) setState(() => _file = f);
-    } catch (e) {
-      if (mounted) setState(() => _error = 'বইটি ডাউনলোড করা যায়নি। ইন্টারনেট দেখে আবার চেষ্টা করুন।');
+    } finally {
+      client.close(force: true);
     }
   }
 
