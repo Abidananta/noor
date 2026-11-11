@@ -1,4 +1,5 @@
-import 'package:audioplayers/audioplayers.dart';
+import 'package:audioplayers/audioplayers.dart' show PlayerState;
+import 'package:just_audio/just_audio.dart' as ja;
 import 'package:flutter/material.dart';
 import '../audio_focus.dart';
 import '../features/common.dart' show bnDigits;
@@ -15,10 +16,14 @@ String quranAudioUrl(int surah) =>
     'https://cdn.islamic.network/quran/audio-surah/$kQuranBitrate/$kQuranReciter/$surah.mp3';
 
 /// One shared player, so the recitation keeps going while you move around the app.
+///
+/// Uses just_audio (ExoPlayer on Android): it starts playing after the first
+/// few seconds are buffered instead of waiting for a big part of the file,
+/// which is why a long surah now starts much faster than before.
 class QuranAudio {
   QuranAudio._();
 
-  static final AudioPlayer player = AudioPlayer();
+  static final ja.AudioPlayer player = ja.AudioPlayer();
   static final ValueNotifier<int?> current = ValueNotifier<int?>(null);
   static final ValueNotifier<PlayerState> state =
       ValueNotifier<PlayerState>(PlayerState.stopped);
@@ -26,21 +31,39 @@ class QuranAudio {
   static final ValueNotifier<Duration> duration = ValueNotifier<Duration>(Duration.zero);
   static final ValueNotifier<bool> failed = ValueNotifier<bool>(false);
 
+  /// true while the audio is being fetched / buffered (spinner on the button).
+  static final ValueNotifier<bool> loading = ValueNotifier<bool>(false);
+
   static bool _started = false;
+  static bool dragging = false;
   static int _token = 0;
 
   static void _init() {
     if (_started) return;
     _started = true;
-    player.onPlayerStateChanged.listen((s) => state.value = s);
-    player.onPositionChanged.listen((d) {
+    player.playerStateStream.listen((s) {
+      final busy = s.processingState == ja.ProcessingState.loading ||
+          s.processingState == ja.ProcessingState.buffering;
+      loading.value = busy && current.value != null;
+      if (s.processingState == ja.ProcessingState.completed) {
+        state.value = PlayerState.completed;
+        _onComplete();
+      } else if (s.processingState == ja.ProcessingState.idle) {
+        state.value = PlayerState.stopped;
+      } else {
+        state.value = s.playing ? PlayerState.playing : PlayerState.paused;
+      }
+    });
+    player.positionStream.listen((d) {
+      if (dragging) return;
       position.value = d;
       if (d > Duration.zero && failed.value) failed.value = false;
     });
-    player.onDurationChanged.listen((d) => duration.value = d);
-    player.onPlayerComplete.listen((_) => _onComplete());
+    player.durationStream.listen((d) {
+      if (d != null) duration.value = d;
+    });
     audioOwner.addListener(() {
-      if (audioOwner.value != 'quran' && state.value == PlayerState.playing) {
+      if (audioOwner.value != 'quran' && player.playing) {
         player.pause();
       }
     });
@@ -62,38 +85,33 @@ class QuranAudio {
     final token = ++_token;
     current.value = surah;
     failed.value = false;
+    loading.value = true;
     position.value = Duration.zero;
     duration.value = Duration.zero;
     try {
-      await player.stop();
-      await player.play(UrlSource(quranAudioUrl(surah)));
+      await player.setUrl(quranAudioUrl(surah));
+      if (token != _token) return; // another surah was chosen meanwhile
+      // Not awaited: the future only completes when the playback ends.
+      player.play();
     } catch (_) {
-      if (token == _token) failed.value = true;
-      return;
-    }
-    // Nothing started after a while -> probably no internet.
-    Future<void>.delayed(const Duration(seconds: 20), () {
-      if (token == _token &&
-          position.value == Duration.zero &&
-          state.value != PlayerState.paused) {
+      if (token == _token) {
         failed.value = true;
+        loading.value = false;
       }
-    });
+    }
   }
 
   /// Play this surah, or pause / resume it when it is already the current one.
   static Future<void> toggle(int surah) async {
     _init();
-    if (current.value == surah) {
-      if (state.value == PlayerState.playing) {
+    if (current.value == surah && player.processingState != ja.ProcessingState.idle) {
+      if (player.playing) {
         await player.pause();
-        return;
-      }
-      if (state.value == PlayerState.paused) {
+      } else {
         audioOwner.value = 'quran';
-        await player.resume();
-        return;
+        player.play();
       }
+      return;
     }
     await play(surah);
   }
@@ -123,6 +141,7 @@ class QuranAudio {
     } catch (_) {}
     current.value = null;
     failed.value = false;
+    loading.value = false;
     position.value = Duration.zero;
     duration.value = Duration.zero;
   }
@@ -189,7 +208,7 @@ class SurahListenButton extends StatelessWidget {
   }
 }
 
-/// Bottom player: appears as soon as a surah is started.
+/// Bottom player: small, no background, appears as soon as a surah is started.
 class QuranPlayerBar extends StatefulWidget {
   const QuranPlayerBar({super.key});
 
@@ -216,49 +235,56 @@ class _QuranPlayerBarState extends State<QuranPlayerBar> {
         if (id == null) return const SizedBox.shrink();
         Surah? s;
         if (id >= 1 && id <= _all.length) s = _all[id - 1];
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(16, 4, 16, 14),
-          child: GlassCard(
-            blur: 16,
-            radius: 24,
-            padding: const EdgeInsets.fromLTRB(16, 10, 8, 4),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
+        // SafeArea keeps the buttons above the phone's own back/home bar.
+        return SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 0, 4, 6),
+            child: Row(
               children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        s == null
-                            ? bnDigits('$id')
-                            : '${bnDigits('$id')}. ${s.transliteration}',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-                      ),
-                    ),
-                    if (s != null)
-                      Text(s.name, style: const TextStyle(fontSize: 21, color: kGold)),
-                    IconButton(
-                      visualDensity: VisualDensity.compact,
-                      icon: Icon(Icons.close_rounded, color: wh(.7)),
-                      onPressed: QuranAudio.stop,
-                    ),
-                  ],
-                ),
-                ValueListenableBuilder<bool>(
-                  valueListenable: QuranAudio.failed,
-                  builder: (_, f, __) => f
-                      ? Padding(
-                          padding: const EdgeInsets.only(bottom: 2),
-                          child: Text(tr('qa_err'),
-                              style: const TextStyle(
-                                  fontSize: 12.5, color: Color(0xFFF87171))),
-                        )
-                      : const SizedBox.shrink(),
-                ),
-                const _Progress(),
                 _Controls(id: id),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              s == null
+                                  ? bnDigits('$id')
+                                  : '${bnDigits('$id')}. ${s.transliteration}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                  fontSize: 14, fontWeight: FontWeight.w700, height: 1.3),
+                            ),
+                          ),
+                          if (s != null)
+                            Text(s.name,
+                                style: const TextStyle(
+                                    fontSize: 17, color: kGold, height: 1.3)),
+                        ],
+                      ),
+                      ValueListenableBuilder<bool>(
+                        valueListenable: QuranAudio.failed,
+                        builder: (_, f, __) => f
+                            ? Text(tr('qa_err'),
+                                style: const TextStyle(
+                                    fontSize: 11.5, color: Color(0xFFF87171)))
+                            : const _Progress(),
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  iconSize: 20,
+                  icon: Icon(Icons.close_rounded, color: wh(.7)),
+                  onPressed: QuranAudio.stop,
+                ),
               ],
             ),
           ),
@@ -288,22 +314,31 @@ class _Progress extends StatelessWidget {
           final posMs = pos.inMilliseconds.clamp(0, maxMs.toInt()).toDouble();
           return Row(
             children: [
-              Text(_fmt(pos), style: TextStyle(fontSize: 11.5, color: wh(.7))),
+              Text(_fmt(pos), style: TextStyle(fontSize: 10.5, color: wh(.7))),
               Expanded(
-                child: Slider(
-                  value: posMs,
-                  max: maxMs,
-                  activeColor: kGold,
-                  onChanged: (v) =>
-                      QuranAudio.position.value = Duration(milliseconds: v.round()),
-                  onChangeEnd: (v) =>
-                      QuranAudio.seek(Duration(milliseconds: v.round())),
+                child: SliderTheme(
+                  data: SliderTheme.of(context).copyWith(
+                    trackHeight: 2.5,
+                    thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 5),
+                    overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
+                    activeTrackColor: kGold,
+                    inactiveTrackColor: wh(.22),
+                    thumbColor: kGold,
+                  ),
+                  child: Slider(
+                    value: posMs,
+                    max: maxMs,
+                    onChangeStart: (_) => QuranAudio.dragging = true,
+                    onChanged: (v) =>
+                        QuranAudio.position.value = Duration(milliseconds: v.round()),
+                    onChangeEnd: (v) async {
+                      await QuranAudio.seek(Duration(milliseconds: v.round()));
+                      QuranAudio.dragging = false;
+                    },
+                  ),
                 ),
               ),
-              Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: Text(_fmt(dur), style: TextStyle(fontSize: 11.5, color: wh(.7))),
-              ),
+              Text(_fmt(dur), style: TextStyle(fontSize: 10.5, color: wh(.7))),
             ],
           );
         },
@@ -319,26 +354,54 @@ class _Controls extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
+      mainAxisSize: MainAxisSize.min,
       children: [
         IconButton(
-          iconSize: 32,
+          iconSize: 24,
+          visualDensity: VisualDensity.compact,
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
           icon: const Icon(Icons.skip_previous_rounded),
           onPressed: id > 1 ? () => QuranAudio.step(-1) : null,
         ),
-        ValueListenableBuilder<PlayerState>(
-          valueListenable: QuranAudio.state,
-          builder: (_, st, __) => IconButton(
-            iconSize: 46,
-            color: kGold,
-            icon: Icon(st == PlayerState.playing
-                ? Icons.pause_circle_filled_rounded
-                : Icons.play_circle_fill_rounded),
-            onPressed: QuranAudio.playPause,
+        ValueListenableBuilder<bool>(
+          valueListenable: QuranAudio.loading,
+          builder: (_, busy, __) => ValueListenableBuilder<PlayerState>(
+            valueListenable: QuranAudio.state,
+            builder: (_, st, __) => SizedBox(
+              width: 42,
+              height: 42,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  IconButton(
+                    iconSize: 38,
+                    padding: EdgeInsets.zero,
+                    color: kGold,
+                    icon: Icon(st == PlayerState.playing
+                        ? Icons.pause_circle_filled_rounded
+                        : Icons.play_circle_fill_rounded),
+                    onPressed: QuranAudio.playPause,
+                  ),
+                  if (busy)
+                    const IgnorePointer(
+                      child: SizedBox(
+                        width: 38,
+                        height: 38,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2.5, color: Color(0xFF3B2A05)),
+                      ),
+                    ),
+                ],
+              ),
+            ),
           ),
         ),
         IconButton(
-          iconSize: 32,
+          iconSize: 24,
+          visualDensity: VisualDensity.compact,
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
           icon: const Icon(Icons.skip_next_rounded),
           onPressed: id < 114 ? () => QuranAudio.step(1) : null,
         ),

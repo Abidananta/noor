@@ -13,6 +13,7 @@ import 'common.dart';
 import 'prayer_times_screen.dart';
 import 'gazal_screen.dart';
 import 'kitab_data.dart';
+import 'kitab_reader.dart';
 
 /// User's display name (empty = not set yet).
 final ValueNotifier<String> profileName = ValueNotifier<String>('');
@@ -67,10 +68,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       streak++;
     }
 
-    int booksDone = 0;
-    for (int i = 0; i < kBooks.length; i++) {
-      if ((p.getInt('kitab_$i') ?? 0) == 3) booksDone++;
-    }
+    final booksDone = await KitabHistory.finishedCount();
 
     final bm = (await QuranStore.bookmarks()).length;
     final history = await KitabHistory.load();
@@ -286,12 +284,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(kBooks[h.book].title,
+                            Text(h.title,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: const TextStyle(
                                     fontSize: 16, fontWeight: FontWeight.w700)),
-                            Text(kBooks[h.book].author,
+                            Text('PDF${h.book.sizeText.isEmpty ? '' : ' · ${h.book.sizeText}'}',
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(fontSize: 12.5, color: wh(.7))),

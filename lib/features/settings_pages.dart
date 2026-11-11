@@ -311,15 +311,15 @@ class AboutPage extends StatelessWidget {
               _sectionTitle(tr('ab_dev')),
               Row(children: [
                 Container(
-                  width: 52,
-                  height: 52,
+                  width: 64,
+                  height: 64,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    gradient: const LinearGradient(colors: [kGold, kMint]),
+                    border: Border.all(color: kGold, width: 2),
                   ),
-                  alignment: Alignment.center,
-                  child: const Text('A',
-                      style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: Color(0xFF052A21))),
+                  child: ClipOval(
+                    child: Image.asset('assets/dev/ananta.jpg', fit: BoxFit.cover),
+                  ),
                 ),
                 const SizedBox(width: 14),
                 const Expanded(
@@ -345,7 +345,7 @@ class AboutPage extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _sectionTitle(tr('ab_credits')),
-              Text(tr('ab_credits_body'), style: TextStyle(fontSize: 14, height: 1.5, color: wh(.8))),
+              Text('All credit Ananta Abid', style: TextStyle(fontSize: 14, height: 1.5, color: wh(.8))),
             ],
           )),
           FootNote('© ${DateTime.now().year} $kDeveloperName · ${tr('ab_rights')}'),

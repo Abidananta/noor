@@ -1,7 +1,7 @@
 name: noor_app
 description: Bangla Islamic app
 publish_to: "none"
-version: 1.4.0+6
+version: 1.0.0+1
 
 environment:
   sdk: ">=3.3.0 <4.0.0"
@@ -11,6 +11,8 @@ dependencies:
     sdk: flutter
   shared_preferences: ^2.2.3
   audioplayers: ^6.1.0
+  just_audio: ">=0.9.40 <1.0.0"
+  syncfusion_flutter_pdfviewer: ">=28.1.33 <60.0.0"
   open_filex: ^4.5.0
   path_provider: ^2.1.4
   firebase_core: ^4.0.0
@@ -37,3 +39,4 @@ flutter:
     - assets/gazal.json
     - assets/audio/
     - assets/avatars/
+    - assets/dev/

@@ -12,6 +12,7 @@ import 'features/prayer_times_screen.dart';
 import 'features/profile_screen.dart';
 import 'features/settings_screen.dart';
 import 'i18n.dart';
+import 'quran/quran_audio.dart';
 import 'splash.dart';
 import 'ui/glass.dart';
 
@@ -146,12 +147,23 @@ class _RootScreenState extends State<RootScreen> {
         backgroundColor: Colors.transparent,
         extendBody: true,
         body: SafeArea(bottom: false, child: pages[_index]),
-        bottomNavigationBar: _GlassNav(
-          index: _index,
-          onChanged: (i) => setState(() {
-            _index = i;
-            _lastTab = i;
-          }),
+        bottomNavigationBar: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Small Quran player: shows on every tab while a surah is playing.
+            MediaQuery.removePadding(
+              context: context,
+              removeBottom: true,
+              child: const QuranPlayerBar(),
+            ),
+            _GlassNav(
+              index: _index,
+              onChanged: (i) => setState(() {
+                _index = i;
+                _lastTab = i;
+              }),
+            ),
+          ],
         ),
       ),
     );
@@ -164,7 +176,7 @@ class _GlassNav extends StatelessWidget {
   const _GlassNav({required this.index, required this.onChanged});
 
   static const _icons = [
-    Icons.menu_book_rounded,
+    Icons.home_rounded,
     Icons.grid_view_rounded,
     Icons.settings_rounded,
   ];
@@ -1114,47 +1126,63 @@ class _Grid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GridView.count(
-      crossAxisCount: 4,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      mainAxisSpacing: 10,
-      crossAxisSpacing: 10,
-      childAspectRatio: 0.84,
-      children: items
-          .map((e) => GlassCard(
-                radius: 20,
-                blur: 12,
-                opacity: 0.10,
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-                onTap: () => e.open(context),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Container(
-                      width: 46,
-                      height: 46,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(15),
-                        gradient: LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [e.color.withOpacity(.38), e.color.withOpacity(.12)],
-                        ),
-                        border: Border.all(color: e.color.withOpacity(.45)),
-                      ),
-                      child: Icon(e.icon, size: 26, color: e.color),
+    // Fixed row height (not a ratio) so two-line Bangla labels are never cut,
+    // and the system font-size setting can't push the text out of the tile.
+    return MediaQuery.withClampedTextScaling(
+      minScaleFactor: 1.0,
+      maxScaleFactor: 1.1,
+      child: GridView.builder(
+        padding: EdgeInsets.zero,
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        itemCount: items.length,
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 4,
+          mainAxisSpacing: 10,
+          crossAxisSpacing: 10,
+          mainAxisExtent: 122,
+        ),
+        itemBuilder: (context, i) {
+          final e = items[i];
+          return GlassCard(
+            radius: 20,
+            blur: 12,
+            opacity: 0.10,
+            padding: const EdgeInsets.fromLTRB(3, 10, 3, 8),
+            onTap: () => e.open(context),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.start,
+              children: [
+                Container(
+                  width: 46,
+                  height: 46,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(15),
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [e.color.withOpacity(.38), e.color.withOpacity(.12)],
                     ),
-                    const SizedBox(height: 8),
-                    Text(e.label,
+                    border: Border.all(color: e.color.withOpacity(.45)),
+                  ),
+                  child: Icon(e.icon, size: 26, color: e.color),
+                ),
+                const SizedBox(height: 8),
+                Expanded(
+                  child: Align(
+                    alignment: Alignment.topCenter,
+                    child: Text(e.label,
                         textAlign: TextAlign.center,
                         maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 12.5, height: 1.2)),
-                  ],
+                        softWrap: true,
+                        style: const TextStyle(fontSize: 12.5, height: 1.45)),
+                  ),
                 ),
-              ))
-          .toList(),
+              ],
+            ),
+          );
+        },
+      ),
     );
   }
 }

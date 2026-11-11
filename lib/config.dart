@@ -15,6 +15,11 @@ const String kGazalDriveFolder = '';
 /// Google API key with the Drive API enabled (needed to list a Drive folder).
 const String kGazalDriveKey = '';
 
+/// Kitab (PDF books). Every .pdf file in this GitHub folder shows up in the
+/// Kitab page automatically; tapping one opens it inside the app.
+/// Just upload PDFs to the `kitab/` folder of the repo - no new build needed.
+const String kKitabGithub = 'https://github.com/Abidananta/noor/tree/main/kitab';
+
 // ---------------- App info / updates ----------------
 
 /// Filled in by the build (see .github/workflows/build.yml) from the
