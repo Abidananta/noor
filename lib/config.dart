@@ -1,11 +1,9 @@
-/// Default online gazal sources (optional).
-///
-/// Anything you type in the app (Gazal page -> cloud icon) overrides these.
-/// Fill them in if you want every user to get your gazal list out of the box.
+/// Online gazal sources. Every audio file in the GitHub folder below shows up
+/// in the Gazal page automatically (just upload a file to the folder).
 ///
 /// GitHub: 'owner/repo' (reads the "gazal" folder) or 'owner/repo/folder'
 ///         or a full link such as https://github.com/owner/repo/tree/main/audio
-const String kGazalGithub = '';
+const String kGazalGithub = 'https://github.com/Abidananta/noor/tree/main/gazal';
 
 /// Folder used when only 'owner/repo' is given.
 const String kGazalDefaultFolder = 'gazal';

@@ -3,26 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../ui/glass.dart';
 import 'common.dart';
-
-class _Book {
-  final String title;
-  final String author;
-  final String about;
-  const _Book(this.title, this.author, this.about);
-}
-
-const _books = <_Book>[
-  _Book('রিয়াদুস সালেহীন', 'ইমাম নববী (রহ.)', 'আখলাক, ইবাদত ও দৈনন্দিন জীবনের হাদীস সংকলন'),
-  _Book('আল-আরবাঈন আন-নববীয়্যাহ', 'ইমাম নববী (রহ.)', 'দ্বীনের মূল ভিত্তিসংক্রান্ত চল্লিশটি হাদীস'),
-  _Book('সহীহ বুখারী', 'ইমাম বুখারী (রহ.)', 'সবচেয়ে প্রসিদ্ধ হাদীস সংকলন'),
-  _Book('সহীহ মুসলিম', 'ইমাম মুসলিম (রহ.)', 'সিহাহ সিত্তাহর অন্যতম প্রধান গ্রন্থ'),
-  _Book('হিসনুল মুসলিম', 'সাঈদ ইবনু আলী আল-কাহতানী', 'কুরআন-সুন্নাহর দু\'আ ও যিকিরের সংকলন'),
-  _Book('আর-রাহীকুল মাখতূম', 'সফিউর রহমান মুবারকপুরী', 'রাসূলুল্লাহ ﷺ-এর সীরাত'),
-  _Book('তাফসীর ইবনু কাসীর', 'ইমাম ইবনু কাসীর (রহ.)', 'কুরআনের প্রসিদ্ধ তাফসীর'),
-  _Book('ফিকহুস সুন্নাহ', 'সাইয়্যিদ সাবিক (রহ.)', 'ইবাদত ও লেনদেনের মাসআলা'),
-  _Book('বেহেশতী জেওর', 'আশরাফ আলী থানভী (রহ.)', 'দৈনন্দিন মাসআলা-মাসায়েল'),
-  _Book('ফাযায়েলে আমল', 'যাকারিয়া কান্ধলভী (রহ.)', 'আমলের ফযীলতসংক্রান্ত সংকলন'),
-];
+import 'kitab_data.dart';
 
 const _statusLabels = ['তালিকায়', 'পড়তে চাই', 'পড়ছি', 'শেষ করেছি'];
 const _statusIcons = [
@@ -40,7 +21,7 @@ class KitabScreen extends StatefulWidget {
 }
 
 class _KitabScreenState extends State<KitabScreen> {
-  final List<int> _status = List<int>.filled(_books.length, 0);
+  final List<int> _status = List<int>.filled(kBooks.length, 0);
   bool _loaded = false;
 
   @override
@@ -51,7 +32,7 @@ class _KitabScreenState extends State<KitabScreen> {
 
   Future<void> _load() async {
     final p = await SharedPreferences.getInstance();
-    for (int i = 0; i < _books.length; i++) {
+    for (int i = 0; i < kBooks.length; i++) {
       final v = p.getInt('kitab_$i') ?? 0;
       _status[i] = (v >= 0 && v < _statusLabels.length) ? v : 0;
     }
@@ -64,6 +45,11 @@ class _KitabScreenState extends State<KitabScreen> {
     await p.setInt('kitab_$i', _status[i]);
   }
 
+  Future<void> _open(int i) async {
+    await openBook(context, i);
+    if (mounted) _load();
+  }
+
   @override
   Widget build(BuildContext context) {
     if (!_loaded) {
@@ -73,14 +59,14 @@ class _KitabScreenState extends State<KitabScreen> {
       title: tr('f_kitab'),
       body: ListView.separated(
         padding: const EdgeInsets.fromLTRB(16, 6, 16, 24),
-        itemCount: _books.length + 1,
+        itemCount: kBooks.length + 1,
         separatorBuilder: (_, __) => const SizedBox(height: 10),
         itemBuilder: (_, i) {
-          if (i == _books.length) {
+          if (i == kBooks.length) {
             return const FootNote(
-                'এটি আপনার পড়ার তালিকা। কার্ডে ট্যাপ করে অবস্থা বদলান (পড়তে চাই → পড়ছি → শেষ করেছি)।');
+                'কার্ডে ট্যাপ করলে বইটি পড়ার জন্য খুলবে। ডান পাশের আইকনে ট্যাপ করে অবস্থা বদলান (পড়তে চাই → পড়ছি → শেষ করেছি)। যে বইগুলো খুলেছেন সেগুলো প্রোফাইলের "পড়ার ইতিহাস"-এ দেখা যাবে।');
           }
-          final b = _books[i];
+          final b = kBooks[i];
           final s = _status[i];
           final active = s != 0;
           return GlassCard(
@@ -89,7 +75,7 @@ class _KitabScreenState extends State<KitabScreen> {
             opacity: active ? 0.16 : 0.10,
             tint: s == 3 ? kMint : (s == 2 ? kGold : null),
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            onTap: () => _cycle(i),
+            onTap: () => _open(i),
             child: Row(
               children: [
                 Container(
@@ -118,13 +104,20 @@ class _KitabScreenState extends State<KitabScreen> {
                     ],
                   ),
                 ),
-                const SizedBox(width: 8),
-                Column(
-                  children: [
-                    Icon(_statusIcons[s], color: active ? Colors.white : wh(.6)),
-                    const SizedBox(height: 2),
-                    Text(_statusLabels[s], style: TextStyle(fontSize: 11, color: wh(.8))),
-                  ],
+                const SizedBox(width: 4),
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => _cycle(i),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                    child: Column(
+                      children: [
+                        Icon(_statusIcons[s], color: active ? Colors.white : wh(.6)),
+                        const SizedBox(height: 2),
+                        Text(_statusLabels[s], style: TextStyle(fontSize: 11, color: wh(.8))),
+                      ],
+                    ),
+                  ),
                 ),
               ],
             ),

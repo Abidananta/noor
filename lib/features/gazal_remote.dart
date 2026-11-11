@@ -38,19 +38,9 @@ class GazalRemote {
   static const _kCache = 'gz_remote_cache';
   static const _audioExt = ['mp3', 'm4a', 'aac', 'wav', 'ogg', 'opus', 'flac'];
 
-  static Future<GazalSources> sources() async {
-    final p = await SharedPreferences.getInstance();
-    String pick(String key, String fallback) {
-      final v = p.getString(key);
-      return (v == null || v.trim().isEmpty) ? fallback : v;
-    }
-
-    return GazalSources(
-      pick(_kGh, kGazalGithub),
-      pick(_kDrive, kGazalDriveFolder),
-      pick(_kKey, kGazalDriveKey),
-    );
-  }
+  /// The list always comes from the sources set in config.dart.
+  static Future<GazalSources> sources() async =>
+      const GazalSources(kGazalGithub, kGazalDriveFolder, kGazalDriveKey);
 
   static Future<void> saveSources(String github, String drive, String key) async {
     final p = await SharedPreferences.getInstance();

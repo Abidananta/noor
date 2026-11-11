@@ -12,6 +12,7 @@ import 'amal_tracker_screen.dart';
 import 'common.dart';
 import 'prayer_times_screen.dart';
 import 'gazal_screen.dart';
+import 'kitab_data.dart';
 
 /// User's display name (empty = not set yet).
 final ValueNotifier<String> profileName = ValueNotifier<String>('');
@@ -41,6 +42,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   int _bookmarks = 0;
   int _booksDone = 0;
   Surah? _last;
+  List<HistoryEntry> _history = [];
 
   @override
   void initState() {
@@ -66,11 +68,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
 
     int booksDone = 0;
-    for (int i = 0; i < 10; i++) {
+    for (int i = 0; i < kBooks.length; i++) {
       if ((p.getInt('kitab_$i') ?? 0) == 3) booksDone++;
     }
 
     final bm = (await QuranStore.bookmarks()).length;
+    final history = await KitabHistory.load();
     Surah? last;
     final lastId = await QuranStore.lastSurah();
     if (lastId != null) {
@@ -87,6 +90,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _bookmarks = bm;
       _booksDone = booksDone;
       _last = last;
+      _history = history;
     });
   }
 
@@ -241,6 +245,66 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
           ],
+          const SizedBox(height: 22),
+          Text(tr('pf_history'),
+              style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 10),
+          if (_history.isEmpty)
+            GlassCard(
+              blur: 0,
+              radius: 18,
+              opacity: 0.10,
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  const Icon(Icons.menu_book_rounded, color: kGold),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(tr('pf_hist_empty'), style: TextStyle(color: wh(.75))),
+                  ),
+                ],
+              ),
+            )
+          else
+            for (final h in _history.take(6))
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: GlassCard(
+                  blur: 0,
+                  radius: 16,
+                  opacity: 0.10,
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                  onTap: () async {
+                    await openBook(context, h.book);
+                    if (mounted) _load();
+                  },
+                  child: Row(
+                    children: [
+                      const Icon(Icons.menu_book_rounded, color: kGold),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(kBooks[h.book].title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                    fontSize: 16, fontWeight: FontWeight.w700)),
+                            Text(kBooks[h.book].author,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(fontSize: 12.5, color: wh(.7))),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(formatStamp(h.at),
+                          style: TextStyle(fontSize: 11.5, color: wh(.65))),
+                    ],
+                  ),
+                ),
+              ),
           const SizedBox(height: 22),
           Text(tr('pf_shortcuts'), style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w600)),
           const SizedBox(height: 10),

@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../audio_focus.dart';
 import '../i18n.dart';
 import '../ui/glass.dart';
 import 'common.dart';
@@ -51,10 +52,16 @@ class GazalEngine {
     if (_started) return;
     _started = true;
     player.onPlayerComplete.listen((_) => next());
+    audioOwner.addListener(() {
+      if (audioOwner.value != 'gazal' && player.state == PlayerState.playing) {
+        player.pause();
+      }
+    });
   }
 
   static Future<void> play(Track t, List<Track> q) async {
     init();
+    audioOwner.value = 'gazal';
     queue = q;
     current.value = t;
     error.value = null;
@@ -71,6 +78,7 @@ class GazalEngine {
       await player.pause();
     } else if (current.value != null) {
       if (player.state == PlayerState.paused) {
+        audioOwner.value = 'gazal';
         await player.resume();
       } else {
         await play(current.value!, queue);
@@ -223,62 +231,6 @@ class _GazalScreenState extends State<GazalScreen> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _editSources() async {
-    final cur = await GazalRemote.sources();
-    final gh = TextEditingController(text: cur.github);
-    final dr = TextEditingController(text: cur.driveFolder);
-    final key = TextEditingController(text: cur.driveKey);
-    final saved = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: panelColor,
-        title: Text(tr('gz_src_title')),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(tr('gz_src_help'), style: TextStyle(fontSize: 13, color: wh(.75), height: 1.4)),
-              const SizedBox(height: 14),
-              TextField(
-                controller: gh,
-                keyboardType: TextInputType.url,
-                decoration: InputDecoration(
-                  labelText: tr('gz_github_label'),
-                  hintText: 'owner/repo/gazal',
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: dr,
-                keyboardType: TextInputType.url,
-                decoration: InputDecoration(labelText: tr('gz_drive_label')),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: key,
-                decoration: InputDecoration(labelText: tr('gz_key_label')),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('cancel'))),
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: Text(tr('save'), style: const TextStyle(color: kGold))),
-        ],
-      ),
-    );
-    final g = gh.text, d = dr.text, k = key.text;
-    gh.dispose();
-    dr.dispose();
-    key.dispose();
-    if (saved != true) return;
-    await GazalRemote.saveSources(g, d, k);
-    _sync(manual: true);
-  }
-
   Future<void> _saveMine() async {
     final p = await SharedPreferences.getInstance();
     await p.setString(
@@ -316,11 +268,6 @@ class _GazalScreenState extends State<GazalScreen> with WidgetsBindingObserver {
                   width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
               : const Icon(Icons.sync_rounded),
           onPressed: _syncing ? null : () => _sync(manual: true),
-        ),
-        IconButton(
-          tooltip: tr('gz_src_tip'),
-          icon: const Icon(Icons.cloud_outlined),
-          onPressed: _editSources,
         ),
       ],
       body: Column(

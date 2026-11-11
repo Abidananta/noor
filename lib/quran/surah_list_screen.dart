@@ -4,6 +4,7 @@ import '../ui/glass.dart';
 import 'models.dart';
 import 'reader_screen.dart';
 import 'bookmarks_screen.dart';
+import 'quran_audio.dart';
 
 class SurahListScreen extends StatefulWidget {
   const SurahListScreen({super.key});
@@ -61,7 +62,10 @@ class _SurahListScreenState extends State<SurahListScreen> {
             ),
           ],
         ),
-        body: FutureBuilder<List<Surah>>(
+        body: Column(
+          children: [
+            Expanded(
+                child: FutureBuilder<List<Surah>>(
           future: _future,
           builder: (context, snap) {
             if (snap.hasError) {
@@ -180,6 +184,8 @@ class _SurahListScreenState extends State<SurahListScreen> {
                               ),
                             ),
                             Text(s.name, style: const TextStyle(fontSize: 25, color: kGold)),
+                            const SizedBox(width: 2),
+                            SurahPlayButton(surah: s.id),
                           ],
                         ),
                       );
@@ -189,6 +195,9 @@ class _SurahListScreenState extends State<SurahListScreen> {
               ],
             );
           },
+        )),
+            const QuranPlayerBar(),
+          ],
         ),
       ),
     );

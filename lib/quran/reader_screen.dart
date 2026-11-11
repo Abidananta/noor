@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../ui/glass.dart';
 import 'models.dart';
+import 'quran_audio.dart';
 
 const _bismillah = 'بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ';
 
@@ -62,7 +63,10 @@ class _ReaderScreenState extends State<ReaderScreen> {
             ),
           ],
         ),
-        body: ListView.builder(
+        body: Column(
+          children: [
+            Expanded(
+                child: ListView.builder(
           padding: const EdgeInsets.fromLTRB(14, 4, 14, 28),
           itemCount: s.verses.length + 1,
           itemBuilder: (_, i) {
@@ -126,6 +130,9 @@ class _ReaderScreenState extends State<ReaderScreen> {
               ),
             );
           },
+        )),
+            const QuranPlayerBar(),
+          ],
         ),
       ),
     );
@@ -163,6 +170,8 @@ class _SurahHeader extends StatelessWidget {
                   textDirection: TextDirection.rtl,
                   style: TextStyle(fontSize: size, height: 1.8)),
             ],
+            const SizedBox(height: 14),
+            SurahListenButton(surah: s.id),
           ],
         ),
       ),
