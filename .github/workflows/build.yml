@@ -5,6 +5,9 @@ on:
     branches: [main, master]
   workflow_dispatch:
 
+permissions:
+  contents: write # needed to publish the APK as a GitHub Release
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -28,11 +31,24 @@ jobs:
           cp -r tmp_app/android ./android
           rm -rf tmp_app
 
+      # Fixed signing key => the same SHA-1 on every build, which Google
+      # Sign-In needs (a fresh random key each run would break login).
+      - name: Use fixed debug keystore
+        run: |
+          mkdir -p ~/.android
+          cp signing/debug.keystore ~/.android/debug.keystore
+
       # Release builds need this for the AI chat and online gazal
       - name: Add internet permission
         run: |
           sed -i 's|<application|<uses-permission android:name="android.permission.INTERNET"/>\n    <application|' android/app/src/main/AndroidManifest.xml
           grep -n "INTERNET" android/app/src/main/AndroidManifest.xml
+
+      # Let the app open https links and the mail app (Contact us / Update)
+      - name: Add package visibility queries
+        run: |
+          sed -i 's|<queries>|<queries>\n        <intent><action android:name="android.intent.action.VIEW"/><data android:scheme="https"/></intent>\n        <intent><action android:name="android.intent.action.SENDTO"/><data android:scheme="mailto"/></intent>|' android/app/src/main/AndroidManifest.xml
+          grep -n "mailto" android/app/src/main/AndroidManifest.xml || true
 
       # Some plugins are compiled against an older Android SDK than their
       # dependencies require; force every module to compileSdk 36.
@@ -56,9 +72,24 @@ jobs:
 
       - run: flutter pub get
 
-      - run: flutter build apk --release
+      - name: Read app version from pubspec.yaml
+        id: ver
+        run: |
+          FULL=$(grep '^version:' pubspec.yaml | awk '{print $2}')
+          echo "full=$FULL" >> "$GITHUB_OUTPUT"
+          echo "short=${FULL%%+*}" >> "$GITHUB_OUTPUT"
+
+      - run: flutter build apk --release --dart-define=APP_VERSION=${{ steps.ver.outputs.full }}
 
       - uses: actions/upload-artifact@v4
         with:
           name: noor-app-apk
           path: build/app/outputs/flutter-apk/app-release.apk
+
+      # Publishes the APK as a Release (tag v<version>). The app's
+      # Settings -> "Update app" reads the latest Release.
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.ver.outputs.short }}
+          name: Noor v${{ steps.ver.outputs.short }}
+          files: build/app/outputs/flutter-apk/app-release.apk
