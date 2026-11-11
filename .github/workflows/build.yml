@@ -53,7 +53,7 @@ jobs:
       # Let the app open https links and the mail app (Contact us / Update)
       - name: Add package visibility queries
         run: |
-          sed -i 's|<queries>|<queries>\n        <intent><action android:name="android.intent.action.VIEW"/><data android:scheme="https"/></intent>\n        <intent><action android:name="android.intent.action.SENDTO"/><data android:scheme="mailto"/></intent>|' android/app/src/main/AndroidManifest.xml
+          sed -i 's|<queries>|<queries>\n        <intent><action android:name="android.intent.action.VIEW"/><data android:scheme="https"/></intent>\n        <intent><action android:name="android.intent.action.SENDTO"/><data android:scheme="mailto"/></intent>\n        <intent><action android:name="android.support.customtabs.action.CustomTabsService"/></intent>|' android/app/src/main/AndroidManifest.xml
           grep -n "mailto" android/app/src/main/AndroidManifest.xml || true
 
       # Some plugins are compiled against an older Android SDK than their
@@ -99,6 +99,36 @@ jobs:
             sed -i 's|@android:color/white|#052A21|' "$f"
           done
           grep -n 'android:label' android/app/src/main/AndroidManifest.xml
+
+      # Android 12+ draws the app icon on its own launch screen before Flutter
+      # starts. Make that icon invisible so only the animated splash is seen.
+      - name: Hide the system splash icon
+        run: |
+          RES=android/app/src/main/res
+          mkdir -p $RES/values-v31 $RES/values-night-v31
+          cat > $RES/values-v31/styles.xml <<'EOF3'
+          <?xml version="1.0" encoding="utf-8"?>
+          <resources>
+              <style name="LaunchTheme" parent="@android:style/Theme.Light.NoTitleBar">
+                  <item name="android:windowBackground">@drawable/launch_background</item>
+                  <item name="android:windowSplashScreenBackground">#052A21</item>
+                  <item name="android:windowSplashScreenAnimatedIcon">@android:color/transparent</item>
+                  <item name="android:forceDarkAllowed">false</item>
+              </style>
+          </resources>
+          EOF3
+          cat > $RES/values-night-v31/styles.xml <<'EOF4'
+          <?xml version="1.0" encoding="utf-8"?>
+          <resources>
+              <style name="LaunchTheme" parent="@android:style/Theme.Black.NoTitleBar">
+                  <item name="android:windowBackground">@drawable/launch_background</item>
+                  <item name="android:windowSplashScreenBackground">#052A21</item>
+                  <item name="android:windowSplashScreenAnimatedIcon">@android:color/transparent</item>
+                  <item name="android:forceDarkAllowed">false</item>
+              </style>
+          </resources>
+          EOF4
+          ls $RES/values-v31 $RES/values-night-v31
 
       - name: Read app version from pubspec.yaml
         id: ver
