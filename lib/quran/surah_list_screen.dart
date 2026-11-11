@@ -52,7 +52,7 @@ class _SurahListScreenState extends State<SurahListScreen> {
       child: Scaffold(
         backgroundColor: Colors.transparent,
         appBar: AppBar(
-          title: Text(tr('f_quran')),
+          title: const Text('সকল সূরা'),
           actions: [
             IconButton(
               tooltip: 'বুকমার্ক',

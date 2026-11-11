@@ -83,6 +83,90 @@ class QuranStore {
   static String key(int surah, int verse) => '$surah:$verse';
 }
 
+/// One surah in the history: when it was last read / listened and how often.
+class SurahHistoryEntry {
+  final int surah;
+  final DateTime at;
+  final int reads;
+  final int listens;
+  const SurahHistoryEntry(this.surah, this.at, this.reads, this.listens);
+}
+
+/// Every surah the person reads or listens to is remembered here
+/// (newest first). Shown on Profile -> History.
+class SurahHistory {
+  static const _key = 'surah_history_v1';
+
+  static Future<List<SurahHistoryEntry>> load() async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      final raw = p.getString(_key);
+      if (raw == null || raw.isEmpty) return [];
+      final out = <SurahHistoryEntry>[];
+      for (final e in jsonDecode(raw) as List) {
+        final m = e as Map;
+        out.add(SurahHistoryEntry(
+            m['s'] as int,
+            DateTime.fromMillisecondsSinceEpoch(m['t'] as int),
+            (m['r'] as int?) ?? 0,
+            (m['l'] as int?) ?? 0));
+      }
+      return out;
+    } catch (_) {
+      return [];
+    }
+  }
+
+  static Future<void> record(int surah, {bool listen = false}) async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      final list = await load();
+      var r = 0, l = 0;
+      final i = list.indexWhere((e) => e.surah == surah);
+      if (i >= 0) {
+        r = list[i].reads;
+        l = list[i].listens;
+        list.removeAt(i);
+      }
+      if (listen) {
+        l++;
+      } else {
+        r++;
+      }
+      list.insert(0, SurahHistoryEntry(surah, DateTime.now(), r, l));
+      if (list.length > 114) list.removeRange(114, list.length);
+      await p.setString(
+          _key,
+          jsonEncode([
+            for (final e in list)
+              {'s': e.surah, 't': e.at.millisecondsSinceEpoch, 'r': e.reads, 'l': e.listens}
+          ]));
+    } catch (_) {}
+  }
+}
+
+/// Optional Bangla pronunciation (uccharon) of every ayah.
+/// File: assets/ucharon/quran_ucharon_bn.json  ->  {"1": ["...", ...], "2": [...]}
+/// (one list per surah, one string per ayah). Not shown when the file is absent.
+class QuranUcharon {
+  static Map<int, List<String>>? _cache;
+  static bool _tried = false;
+
+  static Future<Map<int, List<String>>?> load() async {
+    if (_tried) return _cache;
+    _tried = true;
+    try {
+      final raw = await rootBundle.loadString('assets/ucharon/quran_ucharon_bn.json');
+      final m = jsonDecode(raw) as Map<String, dynamic>;
+      _cache = m.map((k, v) =>
+          MapEntry(int.parse(k), (v as List).map((e) => e.toString()).toList()));
+    } catch (_) {
+      _cache = null;
+    }
+    return _cache;
+  }
+}
+
 String toBn(int n) {
   const d = ['০', '১', '২', '৩', '৪', '৫', '৬', '৭', '৮', '৯'];
   return n.toString().split('').map((c) => d[int.parse(c)]).join();

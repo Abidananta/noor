@@ -27,6 +27,14 @@ final Listenable playerChanges =
 /// true while the bottom player is on screen.
 bool playerActive() => _active() != _Src.none;
 
+/// true while the home / menu / settings / profile pages (the ones with the
+/// bottom navigation bar) are on top. The player is hidden there, so the nav
+/// bar is always shown; the player only appears on the audio pages.
+final ValueNotifier<bool> onRootPage = ValueNotifier<bool>(true);
+
+/// Lets [RootScreen] tell [onRootPage] when another page is opened over it.
+final RouteObserver<PageRoute<dynamic>> rootRouteObserver = RouteObserver<PageRoute<dynamic>>();
+
 /// Wraps the whole app, so the same small player shows on every page while
 /// audio is playing (and the pages above it simply get a bit shorter).
 class PlayerHost extends StatelessWidget {
@@ -37,9 +45,9 @@ class PlayerHost extends StatelessWidget {
   Widget build(BuildContext context) {
     return GlassBackground(
       child: AnimatedBuilder(
-        animation: playerChanges,
+        animation: Listenable.merge([playerChanges, onRootPage]),
         builder: (context, _) {
-          final src = _active();
+          final src = onRootPage.value ? _Src.none : _active();
           return Column(
             children: [
               Expanded(
@@ -114,109 +122,101 @@ class _BarView extends StatelessWidget {
   Widget build(BuildContext context) {
     final maxMs = dur.inMilliseconds < 1 ? 1.0 : dur.inMilliseconds.toDouble();
     final posMs = pos.inMilliseconds.clamp(0, maxMs.toInt()).toDouble();
-    // Same look as the gazal player (glass card, title, seek bar,
-    // time | prev play next | time) - only with tighter spacing.
+    // Same look as the gazal player: title, gold seek bar,
+    // time | previous  (play)  next | time.
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
       child: GlassCard(
         blur: 16,
-        radius: 24,
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 2),
-        child: Stack(
+        radius: 26,
+        padding: const EdgeInsets.fromLTRB(18, 12, 18, 8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: Text(title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+            Text(title,
+                maxLines: 1,
+                textAlign: TextAlign.center,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+            if (error != null)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                child: Text(error!,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 12.5, color: Color(0xFFF87171))),
+              )
+            else
+              SliderTheme(
+                data: SliderTheme.of(context).copyWith(
+                  trackHeight: 4,
+                  activeTrackColor: kGold,
+                  inactiveTrackColor: const Color(0xFF263535),
+                  thumbColor: kGold,
+                  thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 9),
+                  overlayShape: const RoundSliderOverlayShape(overlayRadius: 16),
+                  trackShape: const RoundedRectSliderTrackShape(),
+                  tickMarkShape: SliderTickMarkShape.noTickMark,
                 ),
-                if (error != null)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 6),
-                    child: Text(error!,
-                        style: const TextStyle(fontSize: 12.5, color: Color(0xFFF87171))),
-                  )
-                else
-                  SizedBox(
-                    height: 30,
-                    child: Slider(
-                      value: posMs,
-                      max: maxMs,
-                      activeColor: kGold,
-                      onChangeStart: (_) => onSeekStart(),
-                      onChanged: (v) => onSeek(Duration(milliseconds: v.round())),
-                      onChangeEnd: (v) => onSeekEnd(Duration(milliseconds: v.round())),
+                child: SizedBox(
+                  height: 34,
+                  child: Slider(
+                    value: posMs,
+                    max: maxMs,
+                    onChangeStart: (_) => onSeekStart(),
+                    onChanged: (v) => onSeek(Duration(milliseconds: v.round())),
+                    onChangeEnd: (v) => onSeekEnd(Duration(milliseconds: v.round())),
+                  ),
+                ),
+              ),
+            Row(
+              children: [
+                Text(_fmt(pos), style: TextStyle(fontSize: 12, color: wh(.75))),
+                const Spacer(),
+                IconButton(
+                  iconSize: 34,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+                  color: wh(.85),
+                  disabledColor: wh(.35),
+                  icon: const Icon(Icons.skip_previous_rounded),
+                  onPressed: canPrev ? onPrev : null,
+                ),
+                const SizedBox(width: 6),
+                GestureDetector(
+                  onTap: onPlay,
+                  child: Container(
+                    width: 48,
+                    height: 48,
+                    decoration: const BoxDecoration(shape: BoxShape.circle, color: kGold),
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        Icon(playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                            size: 32, color: const Color(0xFF3B2A05)),
+                        if (loading)
+                          const SizedBox(
+                            width: 44,
+                            height: 44,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2.5, color: Color(0xFF3B2A05)),
+                          ),
+                      ],
                     ),
                   ),
-                Row(
-                  children: [
-                    Text(_fmt(pos), style: TextStyle(fontSize: 12, color: wh(.7))),
-                    const Spacer(),
-                    IconButton(
-                      iconSize: 32,
-                      visualDensity: VisualDensity.compact,
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(minWidth: 44, minHeight: 40),
-                      icon: const Icon(Icons.skip_previous_rounded),
-                      onPressed: canPrev ? onPrev : null,
-                    ),
-                    SizedBox(
-                      width: 48,
-                      height: 48,
-                      child: Stack(
-                        alignment: Alignment.center,
-                        children: [
-                          IconButton(
-                            iconSize: 44,
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-                            color: kGold,
-                            icon: Icon(playing
-                                ? Icons.pause_circle_filled_rounded
-                                : Icons.play_circle_fill_rounded),
-                            onPressed: onPlay,
-                          ),
-                          if (loading)
-                            const IgnorePointer(
-                              child: SizedBox(
-                                width: 42,
-                                height: 42,
-                                child: CircularProgressIndicator(
-                                    strokeWidth: 2.5, color: Color(0xFF3B2A05)),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                    IconButton(
-                      iconSize: 32,
-                      visualDensity: VisualDensity.compact,
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(minWidth: 44, minHeight: 40),
-                      icon: const Icon(Icons.skip_next_rounded),
-                      onPressed: canNext ? onNext : null,
-                    ),
-                    const Spacer(),
-                    Text(_fmt(dur), style: TextStyle(fontSize: 12, color: wh(.7))),
-                  ],
                 ),
+                const SizedBox(width: 6),
+                IconButton(
+                  iconSize: 34,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+                  color: wh(.85),
+                  disabledColor: wh(.35),
+                  icon: const Icon(Icons.skip_next_rounded),
+                  onPressed: canNext ? onNext : null,
+                ),
+                const Spacer(),
+                Text(_fmt(dur), style: TextStyle(fontSize: 12, color: wh(.75))),
               ],
-            ),
-            Positioned(
-              top: -6,
-              right: -12,
-              child: IconButton(
-                visualDensity: VisualDensity.compact,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-                iconSize: 19,
-                icon: Icon(Icons.close_rounded, color: wh(.75)),
-                onPressed: onClose,
-              ),
             ),
           ],
         ),

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../i18n.dart';
-import '../quran/surah_list_screen.dart';
+import '../quran/full_quran_screen.dart';
 import '../ui/glass.dart';
 import 'amal_tracker_screen.dart';
 import 'bibaho_screen.dart';
@@ -30,7 +30,7 @@ class Feature {
 }
 
 final List<Feature> ilmFeatures = [
-  Feature('quran', Icons.menu_book_rounded, const Color(0xFFFFC857), () => const SurahListScreen()),
+  Feature('quran', Icons.menu_book_rounded, const Color(0xFFFFC857), () => const FullQuranScreen()),
   Feature('hadith', Icons.auto_stories_rounded, const Color(0xFF5EEAD4), () => const HadithScreen()),
   Feature('prayer', Icons.access_time_filled_rounded, const Color(0xFF7DD3FC),
       () => const PrayerTimesScreen()),

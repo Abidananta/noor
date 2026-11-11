@@ -54,6 +54,7 @@ class NoorApp extends StatelessWidget {
     return MaterialApp(
       key: ValueKey(lang),
       debugShowCheckedModeBanner: false,
+      navigatorObservers: [rootRouteObserver],
       builder: (context, child) => Directionality(
         textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
         child: PlayerHost(child: child ?? const SizedBox.shrink()),
@@ -131,8 +132,39 @@ class RootScreen extends StatefulWidget {
   State<RootScreen> createState() => _RootScreenState();
 }
 
-class _RootScreenState extends State<RootScreen> {
+class _RootScreenState extends State<RootScreen> with RouteAware {
   int _index = _lastTab;
+  PageRoute<dynamic>? _route;
+
+  void _setRoot(bool v) {
+    // never change a notifier in the middle of a build
+    WidgetsBinding.instance.addPostFrameCallback((_) => onRootPage.value = v);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final r = ModalRoute.of(context);
+    if (r is PageRoute && r != _route) {
+      if (_route != null) rootRouteObserver.unsubscribe(this);
+      _route = r;
+      rootRouteObserver.subscribe(this, r);
+    }
+  }
+
+  @override
+  void dispose() {
+    rootRouteObserver.unsubscribe(this);
+    _setRoot(false);
+    super.dispose();
+  }
+
+  @override
+  void didPush() => _setRoot(true);
+  @override
+  void didPopNext() => _setRoot(true);
+  @override
+  void didPushNext() => _setRoot(false);
 
   @override
   Widget build(BuildContext context) {
@@ -147,19 +179,14 @@ class _RootScreenState extends State<RootScreen> {
         backgroundColor: Colors.transparent,
         extendBody: true,
         body: SafeArea(bottom: false, child: pages[_index]),
-        // While audio plays, the player takes the nav bar's place;
-        // closing the player brings the nav bar back.
-        bottomNavigationBar: AnimatedBuilder(
-          animation: playerChanges,
-          builder: (_, __) => playerActive()
-              ? const SizedBox.shrink()
-              : _GlassNav(
-                  index: _index,
-                  onChanged: (i) => setState(() {
-                    _index = i;
-                    _lastTab = i;
-                  }),
-                ),
+        // The nav bar is always shown here (the audio player only appears on
+        // the audio pages, not on these main pages).
+        bottomNavigationBar: _GlassNav(
+          index: _index,
+          onChanged: (i) => setState(() {
+            _index = i;
+            _lastTab = i;
+          }),
         ),
       ),
     );

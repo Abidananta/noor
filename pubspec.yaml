@@ -20,6 +20,7 @@ dependencies:
   google_sign_in: ^6.2.1
   crypto: ^3.0.3
   url_launcher: ^6.3.0
+  scrollable_positioned_list: ^0.3.8
 
 dev_dependencies:
   flutter_launcher_icons: ^0.14.1
@@ -39,4 +40,5 @@ flutter:
     - assets/gazal.json
     - assets/audio/
     - assets/avatars/
+    - assets/ucharon/
     - assets/dev/

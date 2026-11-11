@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../audio_focus.dart';
 import '../i18n.dart';
 import '../ui/glass.dart';
+import 'models.dart' show SurahHistory;
 
 /// Reciter used for the full-surah recitation (Mishary Rashid Alafasy).
 /// Other identifiers can be found at https://alquran.cloud/cdn
@@ -80,6 +81,7 @@ class QuranAudio {
   static Future<void> play(int surah) async {
     _init();
     audioOwner.value = 'quran';
+    SurahHistory.record(surah, listen: true);
     final token = ++_token;
     current.value = surah;
     failed.value = false;

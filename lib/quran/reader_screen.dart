@@ -22,6 +22,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
   void initState() {
     super.initState();
     QuranStore.setLastSurah(widget.surah.id);
+    SurahHistory.record(widget.surah.id);
     QuranStore.bookmarks().then((b) {
       if (mounted) setState(() => _marks = b);
     });

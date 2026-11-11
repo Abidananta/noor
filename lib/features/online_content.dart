@@ -60,18 +60,42 @@ class RItem {
 
 /// Small JSON GET with timeouts. Throws on any failure.
 Future<dynamic> fetchJson(String url) async {
-  final client = HttpClient()..connectionTimeout = const Duration(seconds: 8);
+  final client = HttpClient()..connectionTimeout = const Duration(seconds: 6);
   try {
-    final req = await client.getUrl(Uri.parse(url)).timeout(const Duration(seconds: 10));
+    final req = await client.getUrl(Uri.parse(url)).timeout(const Duration(seconds: 8));
     req.headers.set('Accept', 'application/json');
     req.headers.set('User-Agent', 'NoorApp/1.0');
-    final res = await req.close().timeout(const Duration(seconds: 12));
-    final body = await res.transform(utf8.decoder).join().timeout(const Duration(seconds: 20));
+    final res = await req.close().timeout(const Duration(seconds: 10));
+    final body = await res.transform(utf8.decoder).join().timeout(const Duration(seconds: 15));
     if (res.statusCode != 200) throw HttpException('HTTP ${res.statusCode}');
     return jsonDecode(body);
   } finally {
     client.close(force: true);
   }
+}
+
+/// Asks several mirrors of the same file at once and returns the first answer.
+/// (Some networks block one host but not another, e.g. cdn.jsdelivr.net.)
+/// If every mirror fails and any of them said 404, the 404 is thrown, because
+/// that means "the server is fine, this file just does not exist".
+Future<dynamic> fetchJsonAny(List<String> urls) {
+  final c = Completer<dynamic>();
+  var failed = 0;
+  Object? notFound;
+  Object? last;
+  for (final u in urls) {
+    fetchJson(u).then((v) {
+      if (!c.isCompleted) c.complete(v);
+    }, onError: (Object e) {
+      failed++;
+      last = e;
+      if (e is HttpException && e.message.contains('404')) notFound = e;
+      if (failed == urls.length && !c.isCompleted) {
+        c.completeError(notFound ?? last ?? 'failed');
+      }
+    });
+  }
+  return c.future;
 }
 
 /// Picks a random item, preferring the internet. Remembers what it fetched
@@ -86,6 +110,7 @@ class RandomSource {
   final Random _rnd = Random();
   final List<String> _recent = [];
   bool offline = false;
+  String lastError = '';
 
   String get _cacheKey => 'rand_cache_v1_$kind';
 
@@ -125,16 +150,18 @@ class RandomSource {
 
   Future<RItem?> next() async {
     // 1) the internet (a few tries: a number can be missing / too long)
-    for (var i = 0; i < 5; i++) {
+    for (var i = 0; i < 8; i++) {
       try {
         final it = await fetchOne(_rnd);
         if (it == null || _recent.contains(it.id)) continue;
         offline = false;
+        lastError = '';
         _seen(it.id);
         _remember(it);
         return it;
-      } catch (_) {
+      } catch (e) {
         // network trouble: a second failure in a row means we are offline
+        lastError = e.toString();
         if (i >= 1) break;
       }
     }
@@ -173,6 +200,8 @@ const _hEditions = <_HEd>[
 
 const _hadithBases = <String>[
   'https://cdn.jsdelivr.net/gh/fawazahmed0/hadith-api@1/editions',
+  'https://fastly.jsdelivr.net/gh/fawazahmed0/hadith-api@1/editions',
+  'https://gcore.jsdelivr.net/gh/fawazahmed0/hadith-api@1/editions',
   'https://raw.githubusercontent.com/fawazahmed0/hadith-api/1/editions',
 ];
 
@@ -180,26 +209,18 @@ Future<RItem?> fetchRandomHadith(Random rnd) async {
   final ed = _hEditions[rnd.nextInt(_hEditions.length)];
   final n = 1 + rnd.nextInt(ed.max);
   dynamic j;
-  Object? err;
-  for (final base in _hadithBases) {
-    try {
-      j = await fetchJson('$base/${ed.id}/$n.json');
-      err = null;
-      break;
-    } catch (e) {
-      err = e;
-      // 404 = this number does not exist in the edition -> try another number
-      if (e is HttpException && e.message.contains('404')) return null;
-    }
+  try {
+    j = await fetchJsonAny([for (final b in _hadithBases) '$b/${ed.id}/$n.json']);
+  } on HttpException catch (e) {
+    // 404 = this number does not exist in the edition -> caller tries another one
+    if (e.message.contains('404')) return null;
+    rethrow;
   }
-  if (err != null || j == null) {
-    if (err != null) throw err;
-    return null;
-  }
-  final m = j as Map;
+  if (j is! Map) return null;
+  final m = j;
   final text = ((m['text'] as String?) ?? '').trim();
   // Skip empty or very long ones (they do not fit a quick "read and move on" card).
-  if (text.length < 25 || text.length > 700) return null;
+  if (text.length < 25 || text.length > 900) return null;
 
   var grade = '';
   final g = m['grades'];
@@ -447,6 +468,14 @@ class _RandomReaderState extends State<RandomReader> {
                 ),
             ],
           ),
+          if (offline && widget.source.lastError.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text('ইন্টারনেট থেকে আনা যায়নি (${widget.source.lastError})',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 11, color: wh(.5))),
+            ),
           const SizedBox(height: 10),
           if (it == null)
             const Padding(

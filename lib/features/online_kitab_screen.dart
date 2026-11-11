@@ -5,10 +5,12 @@ import 'kitab_data.dart';
 import 'kitab_reader.dart';
 import 'online_content.dart' show fetchJson;
 
+
 /// Finds free Islamic PDF books on the internet (archive.org) and opens them
 /// in the normal kitab reader. Nothing has to be uploaded to GitHub.
 class OnlineKitabScreen extends StatefulWidget {
-  const OnlineKitabScreen({super.key});
+  final String title;
+  const OnlineKitabScreen({super.key, this.title = 'অনলাইন কিতাব'});
 
   @override
   State<OnlineKitabScreen> createState() => _OnlineKitabScreenState();
@@ -51,10 +53,14 @@ class _OnlineKitabScreenState extends State<OnlineKitabScreen> {
   bool _failed = false;
   String _query = '';
   String? _opening; // id being resolved
+  List<HistoryEntry> _history = [];
 
   @override
   void initState() {
     super.initState();
+    KitabHistory.load().then((l) {
+      if (mounted) setState(() => _history = l);
+    });
     _search();
   }
 
@@ -65,14 +71,48 @@ class _OnlineKitabScreenState extends State<OnlineKitabScreen> {
     super.dispose();
   }
 
-  String _buildQuery() {
-    final b = StringBuffer('mediatype:texts AND ${_langs[_lang].q} AND $_topic');
+  String _buildQuery(bool loose) {
+    final lang = _langs[_lang].q;
     final t = _query.replaceAll(RegExp(r'[^\p{L}\p{N}\s]', unicode: true), ' ').trim();
+    if (!loose) {
+      final b = StringBuffer('mediatype:texts AND $lang AND $_topic');
+      if (t.isNotEmpty) b.write(' AND (title:($t) OR creator:($t) OR subject:($t))');
+      return b.toString();
+    }
+    // Wider search: plain keywords in any field.
+    final b = StringBuffer('mediatype:texts AND $lang');
     if (t.isNotEmpty) {
-      b.write(' AND (title:($t) OR creator:($t) OR subject:($t))');
+      b.write(' AND ($t)');
+    } else {
+      b.write(' AND (islam OR islamic OR quran OR hadith OR tafsir OR namaz OR salat '
+          'OR ইসলাম OR কুরআন OR হাদীস OR নামাজ)');
     }
     return b.toString();
   }
+
+  Future<List<_Hit>> _fetch(bool loose) async {
+    final uri = Uri.https('archive.org', '/advancedsearch.php', {
+      'q': _buildQuery(loose),
+      'fl[]': ['identifier', 'title', 'creator', 'downloads'],
+      'sort[]': 'downloads desc',
+      'rows': '$_pageSize',
+      'page': '$_page',
+      'output': 'json',
+    });
+    final j = await fetchJson(uri.toString());
+    final docs = ((j as Map)['response'] as Map)['docs'] as List;
+    final found = <_Hit>[];
+    for (final d in docs) {
+      final m = d as Map;
+      final id = (m['identifier'] ?? '').toString();
+      if (id.isEmpty) continue;
+      found.add(_Hit(id, _first(m['title']), _first(m['creator']),
+          int.tryParse((m['downloads'] ?? '0').toString()) ?? 0));
+    }
+    return found;
+  }
+
+  bool _loose = false;
 
   Future<void> _search({bool more = false}) async {
     if (_loading) return;
@@ -82,28 +122,16 @@ class _OnlineKitabScreenState extends State<OnlineKitabScreen> {
       if (!more) {
         _page = 1;
         _hits.clear();
+        _loose = false;
       } else {
         _page++;
       }
     });
     try {
-      final uri = Uri.https('archive.org', '/advancedsearch.php', {
-        'q': _buildQuery(),
-        'fl[]': ['identifier', 'title', 'creator', 'downloads'],
-        'sort[]': 'downloads desc',
-        'rows': '$_pageSize',
-        'page': '$_page',
-        'output': 'json',
-      });
-      final j = await fetchJson(uri.toString());
-      final docs = ((j as Map)['response'] as Map)['docs'] as List;
-      final found = <_Hit>[];
-      for (final d in docs) {
-        final m = d as Map;
-        final id = (m['identifier'] ?? '').toString();
-        if (id.isEmpty) continue;
-        found.add(_Hit(id, _first(m['title']), _first(m['creator']),
-            int.tryParse((m['downloads'] ?? '0').toString()) ?? 0));
+      var found = await _fetch(_loose);
+      if (found.isEmpty && !more && !_loose) {
+        _loose = true; // strict subject search found nothing: widen it
+        found = await _fetch(true);
       }
       if (!mounted) return;
       setState(() {
@@ -195,7 +223,7 @@ class _OnlineKitabScreenState extends State<OnlineKitabScreen> {
   @override
   Widget build(BuildContext context) {
     return GlassPage(
-      title: 'অনলাইন কিতাব',
+      title: widget.title,
       body: Column(
         children: [
           Padding(
@@ -274,6 +302,35 @@ class _OnlineKitabScreenState extends State<OnlineKitabScreen> {
                 label: const Text('আবার চেষ্টা করুন'),
               ),
             ),
+          ],
+          if (_history.isNotEmpty) ...[
+            const SizedBox(height: 28),
+            Text('আগে পড়া বই (ডাউনলোড থাকলে অফলাইনেও খোলে)',
+                style: TextStyle(fontSize: 13.5, color: wh(.7))),
+            const SizedBox(height: 8),
+            for (final e in _history.take(10))
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: GlassCard(
+                  blur: 0,
+                  radius: 16,
+                  opacity: 0.10,
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  onTap: () => openBook(context, e.book),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.picture_as_pdf_rounded, color: kGold),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(e.title,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
           ],
         ],
       );
