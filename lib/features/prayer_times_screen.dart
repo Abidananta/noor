@@ -2,25 +2,29 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../i18n.dart';
 import '../ui/glass.dart';
 import 'common.dart';
 
 class City {
-  final String name;
+  final String name; // Bangla
+  final String en; // shown for every non-Bangla language
   final double lat;
   final double lng;
-  const City(this.name, this.lat, this.lng);
+  const City(this.name, this.en, this.lat, this.lng);
+
+  String get label => appLang.value == 'bn' ? name : en;
 }
 
 const kCities = <City>[
-  City('ঢাকা', 23.8103, 90.4125),
-  City('চট্টগ্রাম', 22.3569, 91.7832),
-  City('সিলেট', 24.8949, 91.8687),
-  City('রাজশাহী', 24.3745, 88.6042),
-  City('খুলনা', 22.8456, 89.5403),
-  City('বরিশাল', 22.7010, 90.3535),
-  City('রংপুর', 25.7439, 89.2752),
-  City('ময়মনসিংহ', 24.7471, 90.4203),
+  City('ঢাকা', 'Dhaka', 23.8103, 90.4125),
+  City('চট্টগ্রাম', 'Chattogram', 22.3569, 91.7832),
+  City('সিলেট', 'Sylhet', 24.8949, 91.8687),
+  City('রাজশাহী', 'Rajshahi', 24.3745, 88.6042),
+  City('খুলনা', 'Khulna', 22.8456, 89.5403),
+  City('বরিশাল', 'Barishal', 22.7010, 90.3535),
+  City('রংপুর', 'Rangpur', 25.7439, 89.2752),
+  City('ময়মনসিংহ', 'Mymensingh', 24.7471, 90.4203),
 ];
 
 /// Selected city index, shared by the home card, header, profile and prayer screen.
@@ -96,6 +100,16 @@ PrayerTimes computePrayerTimes(int y, int m, int d, double lat, double lng) {
 }
 
 /// Instant -> Bangladesh wall clock, e.g. "৪:৫৩ AM" in Bangla digits.
+/// "৩ ঘণ্টা ১০ মিনিট বাকি" in the current language.
+String remainText(Duration left) {
+  final h = left.inHours;
+  final m = left.inMinutes % 60;
+  final s = h > 0
+      ? trf('left_hm', {'h': '$h', 'm': '$m'})
+      : trf('left_m', {'m': '${m < 1 ? 1 : m}'});
+  return localizeDigits(s);
+}
+
 String bdTime(DateTime t) {
   final b = t.toUtc().add(const Duration(hours: 6));
   final h12 = b.hour % 12 == 0 ? 12 : b.hour % 12;
@@ -149,19 +163,19 @@ class _PrayerTimesScreenState extends State<PrayerTimesScreen> {
     final tomorrow = _forDate(bd.add(const Duration(days: 1)));
 
     final rows = <(String, DateTime, IconData)>[
-      ('ফজর', today.fajr, Icons.nights_stay_rounded),
-      ('সূর্যোদয়', today.sunrise, Icons.wb_twilight_rounded),
-      ('যোহর', today.dhuhr, Icons.wb_sunny_rounded),
-      ('আসর', today.asr, Icons.wb_sunny_outlined),
-      ('মাগরিব', today.maghrib, Icons.wb_twilight_rounded),
-      ('ইশা', today.isha, Icons.bedtime_rounded),
+      (tr('p_fajr'), today.fajr, Icons.nights_stay_rounded),
+      (tr('p_sunrise'), today.sunrise, Icons.wb_twilight_rounded),
+      (tr('p_dhuhr'), today.dhuhr, Icons.wb_sunny_rounded),
+      (tr('p_asr'), today.asr, Icons.wb_sunny_outlined),
+      (tr('p_maghrib'), today.maghrib, Icons.wb_twilight_rounded),
+      (tr('p_isha'), today.isha, Icons.bedtime_rounded),
     ];
 
     // next of the 5 fard prayers (sunrise excluded)
-    String nextName = 'ফজর';
+    String nextName = tr('p_fajr');
     DateTime nextTime = tomorrow.fajr;
     for (final r in rows) {
-      if (r.$1 == 'সূর্যোদয়') continue;
+      if (r.$1 == tr('p_sunrise')) continue;
       if (r.$2.isAfter(nowUtc)) {
         nextName = r.$1;
         nextTime = r.$2;
@@ -169,12 +183,10 @@ class _PrayerTimesScreenState extends State<PrayerTimesScreen> {
       }
     }
     final diff = nextTime.difference(nowUtc);
-    final hh = diff.inHours;
-    final mm = diff.inMinutes % 60;
-    final remain = hh > 0 ? '$hh ঘণ্টা $mm মিনিট বাকি' : '${math.max(mm, 1)} মিনিট বাকি';
+    final remain = remainText(diff);
 
     return GlassPage(
-      title: 'নামাযের সময়',
+      title: tr('f_prayer'),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 6, 16, 24),
         children: [
@@ -185,7 +197,7 @@ class _PrayerTimesScreenState extends State<PrayerTimesScreen> {
               itemCount: kCities.length,
               separatorBuilder: (_, __) => const SizedBox(width: 8),
               itemBuilder: (_, i) => ChoiceChip(
-                label: Text(kCities[i].name),
+                label: Text(kCities[i].label),
                 selected: i == _city,
                 onSelected: (_) => saveCity(i),
               ),
@@ -201,7 +213,7 @@ class _PrayerTimesScreenState extends State<PrayerTimesScreen> {
               width: double.infinity,
               child: Column(
                 children: [
-                  Text('পরবর্তী ওয়াক্ত', style: TextStyle(color: wh(.75), fontSize: 14)),
+                  Text(tr('p_next'), style: TextStyle(color: wh(.75), fontSize: 14)),
                   const SizedBox(height: 6),
                   Text('$nextName · ${bdTime(nextTime)}',
                       style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w700)),
@@ -235,9 +247,7 @@ class _PrayerTimesScreenState extends State<PrayerTimesScreen> {
                 ),
               ),
             ),
-          const FootNote(
-              'গণনা: ইউনিভার্সিটি অব ইসলামিক সায়েন্সেস, করাচি পদ্ধতি (ফজর/ইশা ১৮°), হানাফী আসর। '
-              'সময় বাংলাদেশ মান সময় (UTC+৬) অনুযায়ী; স্থানীয় মসজিদের জামাআতের সময়ের সাথে সামান্য ব্যবধান হতে পারে।'),
+          FootNote(tr('calc_note')),
         ],
       ),
     );

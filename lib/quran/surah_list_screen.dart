@@ -1,3 +1,4 @@
+import '../i18n.dart';
 import 'package:flutter/material.dart';
 import '../ui/glass.dart';
 import 'models.dart';
@@ -50,7 +51,7 @@ class _SurahListScreenState extends State<SurahListScreen> {
       child: Scaffold(
         backgroundColor: Colors.transparent,
         appBar: AppBar(
-          title: const Text('আল-কুরআন'),
+          title: Text(tr('f_quran')),
           actions: [
             IconButton(
               tooltip: 'বুকমার্ক',

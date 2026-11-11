@@ -1,16 +1,24 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'auth/auth_screen.dart';
+import 'auth/auth_service.dart';
+import 'auth/user_avatar.dart';
 import 'features/calendar_util.dart';
 import 'features/common.dart';
 import 'features/feature.dart';
 import 'features/prayer_times_screen.dart';
 import 'features/profile_screen.dart';
+import 'features/settings_screen.dart';
+import 'i18n.dart';
 import 'ui/glass.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await loadLang();
   loadCity();
   loadProfile();
+  await loadTheme();
+  await loadAuth();
   runApp(const NoorApp());
 }
 
@@ -19,13 +27,34 @@ class NoorApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // The key makes the whole app rebuild when the language changes.
+    return ValueListenableBuilder<String>(
+      valueListenable: appLang,
+      builder: (_, lang, __) => _buildApp(lang),
+    );
+  }
+
+  Widget _buildApp(String lang) {
+    // Rebuild the theme when the person picks another app colour.
+    return ValueListenableBuilder<int>(
+      valueListenable: themeIndex,
+      builder: (_, __, ___) => _materialApp(lang),
+    );
+  }
+
+  Widget _materialApp(String lang) {
     return MaterialApp(
+      key: ValueKey(lang),
       debugShowCheckedModeBanner: false,
+      builder: (context, child) => Directionality(
+        textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
+        child: child ?? const SizedBox.shrink(),
+      ),
       title: 'Noor',
       theme: ThemeData(
         useMaterial3: true,
         brightness: Brightness.dark,
-        colorSchemeSeed: const Color(0xFF2E9E3A),
+        colorSchemeSeed: currentTheme.seed,
         scaffoldBackgroundColor: Colors.transparent,
         appBarTheme: const AppBarTheme(
           backgroundColor: Colors.transparent,
@@ -34,7 +63,29 @@ class NoorApp extends StatelessWidget {
           centerTitle: true,
         ),
       ),
-      home: const RootScreen(),
+      home: const AuthGate(),
+    );
+  }
+}
+
+/// Remembered so the same tab is shown again after a language change.
+int _lastTab = 0;
+
+/// Register / login screen until someone is signed in, then the app.
+class AuthGate extends StatelessWidget {
+  const AuthGate({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<Account?>(
+      valueListenable: currentAccount,
+      builder: (_, acc, __) {
+        if (acc == null) {
+          _lastTab = 0;
+          return const AuthScreen();
+        }
+        return const RootScreen();
+      },
     );
   }
 }
@@ -47,14 +98,14 @@ class RootScreen extends StatefulWidget {
 }
 
 class _RootScreenState extends State<RootScreen> {
-  int _index = 0;
+  int _index = _lastTab;
 
   @override
   Widget build(BuildContext context) {
     final pages = <Widget>[
       const HomeScreen(),
       const MenuScreen(),
-      const _Placeholder('নোটিফিকেশন'),
+      const SettingsScreen(),
       const ProfileScreen(),
     ];
     return GlassBackground(
@@ -64,20 +115,14 @@ class _RootScreenState extends State<RootScreen> {
         body: SafeArea(bottom: false, child: pages[_index]),
         bottomNavigationBar: _GlassNav(
           index: _index,
-          onChanged: (i) => setState(() => _index = i),
+          onChanged: (i) => setState(() {
+            _index = i;
+            _lastTab = i;
+          }),
         ),
       ),
     );
   }
-}
-
-class _Placeholder extends StatelessWidget {
-  final String title;
-  const _Placeholder(this.title);
-
-  @override
-  Widget build(BuildContext context) =>
-      Center(child: Text(title, style: const TextStyle(fontSize: 20)));
 }
 
 class _GlassNav extends StatelessWidget {
@@ -88,7 +133,7 @@ class _GlassNav extends StatelessWidget {
   static const _icons = [
     Icons.menu_book_rounded,
     Icons.grid_view_rounded,
-    Icons.notifications_none_rounded,
+    Icons.settings_rounded,
   ];
 
   @override
@@ -120,16 +165,7 @@ class _GlassNav extends StatelessWidget {
                       border: i == index ? Border.all(color: kGold.withOpacity(.55)) : null,
                     ),
                     child: i == 3
-                        ? ValueListenableBuilder<String>(
-                            valueListenable: profileName,
-                            builder: (_, name, __) => CircleAvatar(
-                              radius: 14,
-                              backgroundColor: const Color(0xFFE91E63),
-                              child: Text(initialOf(name),
-                                  style: const TextStyle(
-                                      fontSize: 11, fontWeight: FontWeight.w700)),
-                            ),
-                          )
+                        ? const UserAvatar(radius: 14, fontSize: 11)
                         : Icon(_icons[i],
                             size: 26, color: i == index ? Colors.white : wh(.75)),
                   ),
@@ -160,11 +196,11 @@ class HomeScreen extends StatelessWidget {
         const SizedBox(height: 14),
         const BannerCarousel(),
         const SizedBox(height: 22),
-        const _SectionTitle('ইলম ও আমল', kMint, showSearch: true),
+        _SectionTitle(tr('sec_ilm'), kMint, showSearch: true),
         const SizedBox(height: 12),
         _Grid(items: ilmFeatures),
         const SizedBox(height: 22),
-        const _SectionTitle('সেবা', kGold),
+        _SectionTitle(tr('sec_seba'), kGold),
         const SizedBox(height: 12),
         _Grid(items: shebaFeatures),
       ],
@@ -178,19 +214,19 @@ class _Header extends StatelessWidget {
   void _pickCity(BuildContext context) {
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: const Color(0xFF0C3B31),
+      backgroundColor: panelColor,
       builder: (ctx) => SafeArea(
         child: ListView(
           shrinkWrap: true,
           children: [
-            const Padding(
-              padding: EdgeInsets.fromLTRB(20, 16, 20, 8),
-              child: Text('এলাকা নির্বাচন করুন',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+              child: Text(tr('pick_area'),
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
             ),
             for (int i = 0; i < kCities.length; i++)
               ListTile(
-                title: Text(kCities[i].name),
+                title: Text(kCities[i].label),
                 trailing: i == cityIndex.value
                     ? const Icon(Icons.check_rounded, color: kGold)
                     : null,
@@ -216,15 +252,7 @@ class _Header extends StatelessWidget {
             shape: BoxShape.circle,
             border: Border.all(color: wh(.6), width: 1.5),
           ),
-          child: ValueListenableBuilder<String>(
-            valueListenable: profileName,
-            builder: (_, name, __) => CircleAvatar(
-              radius: 21,
-              backgroundColor: const Color(0xFFE91E63),
-              child: Text(initialOf(name),
-                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
-            ),
-          ),
+          child: const UserAvatar(radius: 21, fontSize: 16),
         ),
         const SizedBox(width: 10),
         _Pill(icon: Icons.calendar_month_outlined, text: shortDateBn(bd)),
@@ -233,7 +261,7 @@ class _Header extends StatelessWidget {
           valueListenable: cityIndex,
           builder: (_, c, __) => _Pill(
             icon: Icons.location_on_outlined,
-            text: kCities[c].name,
+            text: kCities[c].label,
             trailing: const Icon(Icons.keyboard_arrow_down, size: 20),
             onTap: () => _pickCity(context),
           ),
@@ -288,7 +316,9 @@ class _DateCard extends StatelessWidget {
                 textAlign: TextAlign.center,
                 style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w600)),
             const SizedBox(height: 5),
-            Text(banglaDateBn(bd), style: TextStyle(fontSize: 13.5, color: wh(.72))),
+            // The Bangla (Bongabdo) calendar line only makes sense in Bangla.
+            if (appLang.value == 'bn')
+              Text(banglaDateBn(bd), style: TextStyle(fontSize: 13.5, color: wh(.72))),
           ],
         ),
       ),
@@ -337,7 +367,15 @@ class _PrayerCardState extends State<_PrayerCard> {
 
         // segment i runs from bounds[i] to bounds[i + 1]
         final bounds = <DateTime>[y.isha, t.fajr, t.sunrise, t.dhuhr, t.asr, t.maghrib, t.isha, n.fajr];
-        const names = ['ইশা', 'ফজর', 'সূর্যোদয়', 'যোহর', 'আসর', 'মাগরিব', 'ইশা'];
+        final names = [
+          tr('p_isha'),
+          tr('p_fajr'),
+          tr('p_sunrise'),
+          tr('p_dhuhr'),
+          tr('p_asr'),
+          tr('p_maghrib'),
+          tr('p_isha'),
+        ];
         int idx = 0;
         for (int i = 0; i < names.length; i++) {
           if (!nowUtc.isBefore(bounds[i])) idx = i;
@@ -355,11 +393,8 @@ class _PrayerCardState extends State<_PrayerCard> {
             : (nowUtc.difference(t.sunrise).inSeconds / sunSpan).clamp(0.0, 1.0).toDouble();
 
         final gap = idx == 2; // between sunrise and Dhuhr: no prayer time
-        final title = gap ? 'যোহর শুরু' : '${names[idx]} শেষ';
-        final left = end.difference(nowUtc);
-        final h = left.inHours;
-        final m = left.inMinutes % 60;
-        final remain = h > 0 ? '$h ঘণ্টা $m মিনিট বাকি' : '${m < 1 ? 1 : m} মিনিট বাকি';
+        final title = gap ? tr('p_dhuhr_start') : trf('p_ends', {'p': names[idx]});
+        final remain = remainText(end.difference(nowUtc));
 
         return GlassCard(
           blur: 20,
@@ -382,9 +417,9 @@ class _PrayerCardState extends State<_PrayerCard> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text('ফজর ${bdTime(t.fajr)}',
+                            Text('${tr('p_fajr')} ${bdTime(t.fajr)}',
                                 style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
-                            Text('ইশা ${bdTime(t.isha)}',
+                            Text('${tr('p_isha')} ${bdTime(t.isha)}',
                                 style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
                           ],
                         ),
@@ -443,7 +478,7 @@ class _PrayerCardState extends State<_PrayerCard> {
                         Row(children: [
                           Icon(Icons.circle, size: 11, color: gap ? kGold : kMint),
                           const SizedBox(width: 6),
-                          Text(gap ? 'এখন ওয়াক্ত নেই' : 'চলমান',
+                          Text(gap ? tr('p_none') : tr('p_running'),
                               style: TextStyle(color: gap ? kGold : kMint, fontSize: 15.5)),
                         ]),
                         Text(bnDigits(remain), style: const TextStyle(fontSize: 15.5)),
@@ -530,11 +565,15 @@ class _BannerCarouselState extends State<BannerCarousel> {
   Timer? _timer;
   int _page = 0;
 
+  // (text key, menu item id it opens, gradient start, gradient end)
+  // To point a banner somewhere else, change the 2nd value to any Feature id
+  // from lib/features/feature.dart (quran, hadith, prayer, tilawat, kitab,
+  // gazal, qshikkha, dua, quiz, amal, ai, bibaho).
   static const _banners = [
-    ('মাস শেষে\nবিশেষ ছাড়', Color(0xFFF59E0B), Color(0xFFB45309)),
-    ('রমযানের\nপ্রস্তুতি', Color(0xFF10B981), Color(0xFF047857)),
-    ('কুরআন শিক্ষা\nকোর্স', Color(0xFF38BDF8), Color(0xFF0369A1)),
-    ('নতুন কিতাব\nএসেছে', Color(0xFFA78BFA), Color(0xFF6D28D9)),
+    ('b_discount', 'kitab', Color(0xFFF59E0B), Color(0xFFB45309)),
+    ('b_ramadan', 'amal', Color(0xFF10B981), Color(0xFF047857)),
+    ('b_course', 'qshikkha', Color(0xFF38BDF8), Color(0xFF0369A1)),
+    ('b_newkitab', 'kitab', Color(0xFFA78BFA), Color(0xFF6D28D9)),
   ];
 
   @override
@@ -575,12 +614,15 @@ class _BannerCarouselState extends State<BannerCarousel> {
                 onPageChanged: (i) => setState(() => _page = i),
                 itemBuilder: (_, i) {
                   final b = _banners[i];
-                  return Container(
+                  return GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => featureById(b.$2)?.open(context),
+                    child: Container(
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
-                        colors: [b.$2, b.$3],
+                        colors: [b.$3, b.$4],
                       ),
                     ),
                     child: Stack(
@@ -607,7 +649,7 @@ class _BannerCarouselState extends State<BannerCarousel> {
                           alignment: Alignment.centerLeft,
                           child: Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 22),
-                            child: Text(b.$1,
+                            child: Text(tr(b.$1),
                                 style: const TextStyle(
                                     fontSize: 28,
                                     height: 1.2,
@@ -615,7 +657,20 @@ class _BannerCarouselState extends State<BannerCarousel> {
                                     color: Colors.white)),
                           ),
                         ),
+                        PositionedDirectional(
+                          end: 16,
+                          bottom: 14,
+                          child: Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(shape: BoxShape.circle, color: wh(.22)),
+                            child: Icon(
+                                isRtl ? Icons.arrow_back_rounded : Icons.arrow_forward_rounded,
+                                size: 18,
+                                color: Colors.white),
+                          ),
+                        ),
                       ],
+                    ),
                     ),
                   );
                 },
@@ -750,13 +805,23 @@ class MenuScreen extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 120),
       children: [
-        const Text('মেনু', style: TextStyle(fontSize: 26, fontWeight: FontWeight.w700)),
+        Row(
+          children: [
+            Text(tr('menu'), style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w700)),
+            const Spacer(),
+            _Pill(
+              icon: Icons.language_rounded,
+              text: currentLangName,
+              onTap: () => showLanguageSheet(context),
+            ),
+          ],
+        ),
         const SizedBox(height: 16),
-        const _SectionTitle('ইলম ও আমল', kMint),
+        _SectionTitle(tr('sec_ilm'), kMint),
         const SizedBox(height: 12),
         _Grid(items: ilmFeatures),
         const SizedBox(height: 22),
-        const _SectionTitle('সেবা', kGold),
+        _SectionTitle(tr('sec_seba'), kGold),
         const SizedBox(height: 12),
         _Grid(items: shebaFeatures),
       ],

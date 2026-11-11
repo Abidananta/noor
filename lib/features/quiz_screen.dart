@@ -1,3 +1,4 @@
+import '../i18n.dart';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import '../ui/glass.dart';
@@ -71,7 +72,7 @@ class _QuizScreenState extends State<QuizScreen> {
   Widget build(BuildContext context) {
     final done = _i >= _qs.length;
     return GlassPage(
-      title: 'তালীমে কুইজ',
+      title: tr('f_quiz'),
       body: done ? _result() : _question(),
     );
   }

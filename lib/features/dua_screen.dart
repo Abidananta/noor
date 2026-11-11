@@ -1,3 +1,4 @@
+import '../i18n.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../ui/glass.dart';
@@ -83,7 +84,7 @@ class _DuaScreenState extends State<DuaScreen> {
     final list = _duas.where((d) => _filter == 'সব' || d.cat == _filter).toList();
 
     return GlassPage(
-      title: "দু'আ",
+      title: tr('f_dua'),
       body: Column(
         children: [
           SizedBox(

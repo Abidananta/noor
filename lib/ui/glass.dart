@@ -1,10 +1,61 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 const kGold = Color(0xFFF2C46D);
 const kMint = Color(0xFF6EE7B7);
 
 Color wh(double a) => Color.fromRGBO(255, 255, 255, a);
+
+/// One selectable app colour scheme (background gradient + panels).
+class NoorTheme {
+  final String id; // translation key is 'th_<id>'
+  final Color bg1, bg2, bg3; // gradient, dark -> light
+  final Color panel; // dialogs / bottom sheets
+  final Color seed; // Material colour seed
+  final Color blob2, blob3; // glowing blobs
+  const NoorTheme(this.id, this.bg1, this.bg2, this.bg3, this.panel, this.seed, this.blob2, this.blob3);
+}
+
+const List<NoorTheme> kThemes = [
+  NoorTheme('green', Color(0xFF052A21), Color(0xFF0C5242), Color(0xFF117C79), Color(0xFF0C3B31),
+      Color(0xFF2E9E3A), Color(0xFF34D399), Color(0xFF22B8CF)),
+  NoorTheme('ocean', Color(0xFF071E3D), Color(0xFF0B3A6B), Color(0xFF0E6E8C), Color(0xFF0B2B4F),
+      Color(0xFF2563EB), Color(0xFF38BDF8), Color(0xFF22D3EE)),
+  NoorTheme('purple', Color(0xFF1E1038), Color(0xFF3B1D6B), Color(0xFF6D3FA0), Color(0xFF2A1650),
+      Color(0xFF7C3AED), Color(0xFFA78BFA), Color(0xFFE879F9)),
+  NoorTheme('rose', Color(0xFF3A0D22), Color(0xFF6B1B3E), Color(0xFFA33A5E), Color(0xFF4A1230),
+      Color(0xFFE11D48), Color(0xFFFB7185), Color(0xFFF472B6)),
+  NoorTheme('sand', Color(0xFF2B1A0E), Color(0xFF5A3A1E), Color(0xFF8A5A2B), Color(0xFF3D2615),
+      Color(0xFFB45309), Color(0xFFFBBF24), Color(0xFFFB923C)),
+  NoorTheme('night', Color(0xFF05070D), Color(0xFF0F172A), Color(0xFF1E293B), Color(0xFF0F172A),
+      Color(0xFF64748B), Color(0xFF475569), Color(0xFF334155)),
+];
+
+/// Index into [kThemes]; the whole app listens to this.
+final ValueNotifier<int> themeIndex = ValueNotifier<int>(0);
+
+NoorTheme get currentTheme => kThemes[themeIndex.value.clamp(0, kThemes.length - 1)];
+
+/// Background colour for dialogs and bottom sheets.
+Color get panelColor => currentTheme.panel;
+
+Future<void> loadTheme() async {
+  try {
+    final p = await SharedPreferences.getInstance();
+    final i = p.getInt('app_theme') ?? 0;
+    if (i >= 0 && i < kThemes.length) themeIndex.value = i;
+  } catch (_) {}
+}
+
+Future<void> setTheme(int i) async {
+  if (i < 0 || i >= kThemes.length) return;
+  themeIndex.value = i;
+  try {
+    final p = await SharedPreferences.getInstance();
+    await p.setInt('app_theme', i);
+  } catch (_) {}
+}
 
 /// Gradient background with soft glowing blobs. Glass cards blur this.
 class GlassBackground extends StatelessWidget {
@@ -13,23 +64,29 @@ class GlassBackground extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        const DecoratedBox(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [Color(0xFF052A21), Color(0xFF0C5242), Color(0xFF117C79)],
+    return ValueListenableBuilder<int>(
+      valueListenable: themeIndex,
+      builder: (_, __, ___) {
+        final t = currentTheme;
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [t.bg1, t.bg2, t.bg3],
+                ),
+              ),
             ),
-          ),
-        ),
-        const Positioned(top: -90, left: -70, child: _Blob(280, kGold, .38)),
-        const Positioned(top: 300, right: -130, child: _Blob(320, Color(0xFF34D399), .30)),
-        const Positioned(bottom: -110, left: -90, child: _Blob(340, Color(0xFF22B8CF), .32)),
-        child,
-      ],
+            const Positioned(top: -90, left: -70, child: _Blob(280, kGold, .38)),
+            Positioned(top: 300, right: -130, child: _Blob(320, t.blob2, .30)),
+            Positioned(bottom: -110, left: -90, child: _Blob(340, t.blob3, .32)),
+            child,
+          ],
+        );
+      },
     );
   }
 }

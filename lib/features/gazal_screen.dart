@@ -7,8 +7,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../i18n.dart';
 import '../ui/glass.dart';
 import 'common.dart';
+import 'gazal_remote.dart';
 
 /// kind: 0 = bundled asset, 1 = internet URL, 2 = file added from the phone
 class Track {
@@ -61,7 +63,7 @@ class GazalEngine {
       await player.stop();
       await player.play(t.source);
     } catch (e) {
-      error.value = 'প্লে করা যায়নি। ফাইল বা ইন্টারনেট চেক করুন।';
+      error.value = tr('gz_play_err');
     }
   }
 
@@ -98,21 +100,27 @@ class GazalScreen extends StatefulWidget {
   State<GazalScreen> createState() => _GazalScreenState();
 }
 
-class _GazalScreenState extends State<GazalScreen> {
+class _GazalScreenState extends State<GazalScreen> with WidgetsBindingObserver {
   List<Track> _bundled = [];
+  List<Track> _remote = [];
   List<Track> _mine = [];
   bool _loaded = false;
+  bool _syncing = false;
 
   PlayerState _state = GazalEngine.player.state;
   Duration _pos = Duration.zero;
   Duration _dur = Duration.zero;
   final List<StreamSubscription<dynamic>> _subs = [];
 
-  List<Track> get _all => [..._bundled, ..._mine];
+  List<Track> get _all {
+    final seen = <String>{};
+    return [..._bundled, ..._remote, ..._mine].where((t) => seen.add(t.id)).toList();
+  }
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     GazalEngine.init();
     _load();
     final p = GazalEngine.player;
@@ -140,7 +148,14 @@ class _GazalScreenState extends State<GazalScreen> {
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Coming back to the app: pick up files added to GitHub / Drive meanwhile.
+    if (state == AppLifecycleState.resumed) _sync();
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     for (final s in _subs) {
       s.cancel();
     }
@@ -170,16 +185,99 @@ class _GazalScreenState extends State<GazalScreen> {
       try {
         for (final e in jsonDecode(saved) as List) {
           final m = e as Map<String, dynamic>;
-          mine.add(Track((m['title'] ?? '') as String, 'আমার গজল', 2, (m['path'] ?? '') as String));
+          mine.add(Track((m['title'] ?? '') as String, tr('gz_mine'), 2, (m['path'] ?? '') as String));
         }
       } catch (_) {}
     }
+    final cached = await GazalRemote.cached();
     if (!mounted) return;
     setState(() {
       _bundled = bundled;
+      _remote = [for (final r in cached) Track(r.title, tr('gz_online'), 1, r.url)];
       _mine = mine;
       _loaded = true;
     });
+    _sync();
+  }
+
+  /// Downloads the newest list from GitHub / Drive (quietly unless [manual]).
+  Future<void> _sync({bool manual = false}) async {
+    if (_syncing) return;
+    setState(() => _syncing = true);
+    SyncResult? result;
+    try {
+      result = await GazalRemote.sync();
+    } catch (_) {}
+    if (!mounted) return;
+    final r = result;
+    setState(() {
+      _syncing = false;
+      if (r != null) {
+        _remote = [for (final i in r.items) Track(i.title, tr('gz_online'), 1, i.url)];
+      }
+    });
+    if (manual) {
+      final msg = r == null || !r.ok
+          ? tr('gz_sync_fail')
+          : (!r.configured ? tr('gz_not_set') : tr('gz_synced'));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+    }
+  }
+
+  Future<void> _editSources() async {
+    final cur = await GazalRemote.sources();
+    final gh = TextEditingController(text: cur.github);
+    final dr = TextEditingController(text: cur.driveFolder);
+    final key = TextEditingController(text: cur.driveKey);
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: panelColor,
+        title: Text(tr('gz_src_title')),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(tr('gz_src_help'), style: TextStyle(fontSize: 13, color: wh(.75), height: 1.4)),
+              const SizedBox(height: 14),
+              TextField(
+                controller: gh,
+                keyboardType: TextInputType.url,
+                decoration: InputDecoration(
+                  labelText: tr('gz_github_label'),
+                  hintText: 'owner/repo/gazal',
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: dr,
+                keyboardType: TextInputType.url,
+                decoration: InputDecoration(labelText: tr('gz_drive_label')),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: key,
+                decoration: InputDecoration(labelText: tr('gz_key_label')),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('cancel'))),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text(tr('save'), style: const TextStyle(color: kGold))),
+        ],
+      ),
+    );
+    final g = gh.text, d = dr.text, k = key.text;
+    gh.dispose();
+    dr.dispose();
+    key.dispose();
+    if (saved != true) return;
+    await GazalRemote.saveSources(g, d, k);
+    _sync(manual: true);
   }
 
   Future<void> _saveMine() async {
@@ -203,14 +301,14 @@ class _GazalScreenState extends State<GazalScreen> {
         await File(src).copy(dest);
         final dot = f.name.lastIndexOf('.');
         final title = dot > 0 ? f.name.substring(0, dot) : f.name;
-        _mine.add(Track(title, 'আমার গজল', 2, dest));
+        _mine.add(Track(title, tr('gz_mine'), 2, dest));
       }
       await _saveMine();
       if (mounted) setState(() {});
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('ফাইল যোগ করা যায়নি')));
+            .showSnackBar(SnackBar(content: Text(tr('gz_fail_add'))));
       }
     }
   }
@@ -237,10 +335,23 @@ class _GazalScreenState extends State<GazalScreen> {
   Widget build(BuildContext context) {
     final all = _all;
     return GlassPage(
-      title: 'গজল',
+      title: tr('f_gazal'),
       actions: [
         IconButton(
-          tooltip: 'ফোন থেকে গজল যোগ করুন',
+          tooltip: tr('gz_sync_tip'),
+          icon: _syncing
+              ? const SizedBox(
+                  width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+              : const Icon(Icons.sync_rounded),
+          onPressed: _syncing ? null : () => _sync(manual: true),
+        ),
+        IconButton(
+          tooltip: tr('gz_src_tip'),
+          icon: const Icon(Icons.cloud_outlined),
+          onPressed: _editSources,
+        ),
+        IconButton(
+          tooltip: tr('gz_add_tip'),
           icon: const Icon(Icons.library_add_rounded),
           onPressed: _addFromPhone,
         ),
@@ -277,15 +388,14 @@ class _GazalScreenState extends State<GazalScreen> {
           children: [
             const Icon(Icons.music_note_rounded, size: 52, color: kGold),
             const SizedBox(height: 12),
-            Text(
-                'এখনো কোনো গজল নেই।\nনিচের বাটনে ফোন থেকে অডিও ফাইল যোগ করুন, তারপর ট্যাপ করলেই প্লে হবে।',
+            Text(tr('gz_empty'),
                 textAlign: TextAlign.center,
                 style: TextStyle(color: wh(.8), height: 1.5, fontSize: 15.5)),
             const SizedBox(height: 18),
             FilledButton.icon(
               onPressed: _addFromPhone,
               icon: const Icon(Icons.library_add_rounded),
-              label: const Text('গজল যোগ করুন'),
+              label: Text(tr('gz_add')),
             ),
           ],
         ),
@@ -334,7 +444,7 @@ class _GazalScreenState extends State<GazalScreen> {
               ),
               if (t.kind == 2)
                 IconButton(
-                  tooltip: 'মুছুন',
+                  tooltip: tr('delete'),
                   icon: Icon(Icons.delete_outline_rounded, color: wh(.7)),
                   onPressed: () => _remove(t),
                 )

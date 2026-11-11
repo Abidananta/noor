@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../i18n.dart';
 import '../quran/surah_list_screen.dart';
 import '../ui/glass.dart';
 import 'amal_tracker_screen.dart';
@@ -15,11 +16,13 @@ import 'quran_shikkha_screen.dart';
 import 'tilawat_screen.dart';
 
 class Feature {
-  final String label;
+  final String id; // translation key is 'f_<id>'
   final IconData icon;
   final Color color;
   final Widget Function() build;
-  const Feature(this.label, this.icon, this.color, this.build);
+  const Feature(this.id, this.icon, this.color, this.build);
+
+  String get label => tr('f_$id');
 
   void open(BuildContext context) {
     Navigator.push(context, MaterialPageRoute(builder: (_) => build()));
@@ -27,29 +30,37 @@ class Feature {
 }
 
 final List<Feature> ilmFeatures = [
-  Feature('কুরআন', Icons.menu_book_rounded, const Color(0xFFFFC857), () => const SurahListScreen()),
-  Feature('হাদীস', Icons.auto_stories_rounded, const Color(0xFF5EEAD4), () => const HadithScreen()),
-  Feature('নামাযের সময়', Icons.access_time_filled_rounded, const Color(0xFF7DD3FC),
+  Feature('quran', Icons.menu_book_rounded, const Color(0xFFFFC857), () => const SurahListScreen()),
+  Feature('hadith', Icons.auto_stories_rounded, const Color(0xFF5EEAD4), () => const HadithScreen()),
+  Feature('prayer', Icons.access_time_filled_rounded, const Color(0xFF7DD3FC),
       () => const PrayerTimesScreen()),
-  Feature('তিলাওয়াত', Icons.record_voice_over_rounded, const Color(0xFFFDBA74),
+  Feature('tilawat', Icons.record_voice_over_rounded, const Color(0xFFFDBA74),
       () => const TilawatScreen()),
-  Feature('কিতাব', Icons.library_books_rounded, const Color(0xFFFCA5A5), () => const KitabScreen()),
-  Feature('গজল', Icons.headphones_rounded, const Color(0xFFFDE68A), () => const GazalScreen()),
-  Feature('কুরআন শিক্ষা', Icons.school_rounded, const Color(0xFFC4B5FD),
+  Feature('kitab', Icons.library_books_rounded, const Color(0xFFFCA5A5), () => const KitabScreen()),
+  Feature('gazal', Icons.headphones_rounded, const Color(0xFFFDE68A), () => const GazalScreen()),
+  Feature('qshikkha', Icons.school_rounded, const Color(0xFFC4B5FD),
       () => const QuranShikkhaScreen()),
-  Feature("দু'আ", Icons.back_hand_rounded, const Color(0xFFF9A8D4), () => const DuaScreen()),
+  Feature('dua', Icons.back_hand_rounded, const Color(0xFFF9A8D4), () => const DuaScreen()),
 ];
 
 final List<Feature> shebaFeatures = [
-  Feature('তালীমে কুইজ', Icons.lightbulb_rounded, const Color(0xFFBEF264), () => const QuizScreen()),
-  Feature('আমল ট্রাকার', Icons.checklist_rounded, const Color(0xFF93C5FD),
+  Feature('quiz', Icons.lightbulb_rounded, const Color(0xFFBEF264), () => const QuizScreen()),
+  Feature('amal', Icons.checklist_rounded, const Color(0xFF93C5FD),
       () => const AmalTrackerScreen()),
-  Feature('AI জিজ্ঞাসা', Icons.auto_awesome_rounded, const Color(0xFF6EE7B7),
+  Feature('ai', Icons.auto_awesome_rounded, const Color(0xFF6EE7B7),
       () => const AiScreen()),
-  Feature('বিবাহ', Icons.diversity_1_rounded, const Color(0xFFFDA4AF), () => const BibahoScreen()),
+  Feature('bibaho', Icons.diversity_1_rounded, const Color(0xFFFDA4AF), () => const BibahoScreen()),
 ];
 
 List<Feature> get allFeatures => [...ilmFeatures, ...shebaFeatures];
+
+/// Finds a menu item by its id (used by the home banners).
+Feature? featureById(String id) {
+  for (final f in allFeatures) {
+    if (f.id == id) return f;
+  }
+  return null;
+}
 
 /// Search over every menu item.
 class FeatureSearchScreen extends StatefulWidget {
@@ -65,9 +76,12 @@ class _FeatureSearchScreenState extends State<FeatureSearchScreen> {
   @override
   Widget build(BuildContext context) {
     final q = _q.trim();
-    final list = allFeatures.where((f) => q.isEmpty || f.label.contains(q)).toList();
+    final ql = q.toLowerCase();
+    final list = allFeatures
+        .where((f) => q.isEmpty || f.label.toLowerCase().contains(ql))
+        .toList();
     return GlassPage(
-      title: 'খুঁজুন',
+      title: tr('search'),
       body: Column(
         children: [
           Padding(
@@ -80,7 +94,7 @@ class _FeatureSearchScreenState extends State<FeatureSearchScreen> {
                 autofocus: true,
                 onChanged: (v) => setState(() => _q = v),
                 decoration: InputDecoration(
-                  hintText: 'মেনু খুঁজুন',
+                  hintText: tr('search_menu'),
                   hintStyle: TextStyle(color: wh(.6)),
                   prefixIcon: Icon(Icons.search_rounded, color: wh(.8)),
                   border: InputBorder.none,

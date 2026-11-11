@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../i18n.dart';
 import '../ui/glass.dart';
 
 /// Glass background + transparent Scaffold + AppBar, used by every feature screen.
@@ -31,11 +32,9 @@ class GlassPage extends StatelessWidget {
   }
 }
 
-const _bnDigits = ['০', '১', '২', '৩', '৪', '৫', '৬', '৭', '৮', '৯'];
-
-/// Replaces every 0-9 in [s] with Bangla digits.
-String bnDigits(String s) =>
-    s.replaceAllMapped(RegExp(r'[0-9]'), (m) => _bnDigits[int.parse(m[0]!)]);
+/// Converts 0-9 to the digits of the current app language
+/// (Bangla, Arabic, Urdu and Hindi get their own digits; others keep 0-9).
+String bnDigits(String s) => localizeDigits(s);
 
 /// Small muted footer note.
 class FootNote extends StatelessWidget {

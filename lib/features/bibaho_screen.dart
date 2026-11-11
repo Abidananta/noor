@@ -1,3 +1,4 @@
+import '../i18n.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../ui/glass.dart';
@@ -83,7 +84,7 @@ class _BibahoScreenState extends State<BibahoScreen> {
   @override
   Widget build(BuildContext context) {
     return GlassPage(
-      title: 'বিবাহ',
+      title: tr('f_bibaho'),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 6, 16, 24),
         children: [

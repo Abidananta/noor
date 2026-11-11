@@ -1,3 +1,4 @@
+import '../i18n.dart';
 import 'package:flutter/material.dart';
 import '../ui/glass.dart';
 import 'common.dart';
@@ -68,7 +69,7 @@ class QuranShikkhaScreen extends StatelessWidget {
     return DefaultTabController(
       length: 2,
       child: GlassPage(
-        title: 'কুরআন শিক্ষা',
+        title: tr('f_qshikkha'),
         bottom: const TabBar(
           indicatorColor: kGold,
           tabs: [Tab(text: 'আরবি হরফ'), Tab(text: 'হরকত ও চিহ্ন')],
@@ -107,7 +108,7 @@ class _LettersTab extends StatelessWidget {
                 onTap: () => showDialog<void>(
                   context: context,
                   builder: (_) => AlertDialog(
-                    backgroundColor: const Color(0xFF0C3B31),
+                    backgroundColor: panelColor,
                     content: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [

@@ -1,3 +1,4 @@
+import '../i18n.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -65,7 +66,7 @@ class _AiScreenState extends State<AiScreen> {
     final result = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF0C3B31),
+        backgroundColor: panelColor,
         title: const Text('API কী'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -189,7 +190,7 @@ class _AiScreenState extends State<AiScreen> {
   @override
   Widget build(BuildContext context) {
     return GlassPage(
-      title: 'AI জিজ্ঞাসা',
+      title: tr('f_ai'),
       actions: [
         IconButton(
           tooltip: 'API কী',

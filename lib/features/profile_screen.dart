@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../auth/auth_service.dart';
+import '../auth/edit_profile_screen.dart';
+import '../auth/user_avatar.dart';
+import '../i18n.dart';
 import '../quran/bookmarks_screen.dart';
 import '../quran/models.dart';
 import '../quran/reader_screen.dart';
@@ -91,47 +95,38 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _load();
   }
 
-  Future<void> _editName() async {
-    final c = TextEditingController(text: profileName.value);
-    final result = await showDialog<String>(
+  Future<void> _logout() async {
+    final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF0C3B31),
-        title: const Text('আপনার নাম'),
-        content: TextField(
-          controller: c,
-          autofocus: true,
-          maxLength: 30,
-          decoration: const InputDecoration(hintText: 'নাম লিখুন'),
-        ),
+        backgroundColor: panelColor,
+        title: Text(tr('pf_logout_title')),
+        content: Text(tr('pf_logout_body')),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('বাতিল')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('no'))),
           TextButton(
-              onPressed: () => Navigator.pop(ctx, c.text.trim()),
-              child: const Text('সংরক্ষণ', style: TextStyle(color: kGold))),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text(tr('pf_logout_yes'), style: const TextStyle(color: Color(0xFFF87171)))),
         ],
       ),
     );
-    c.dispose();
-    if (result == null) return;
-    final p = await SharedPreferences.getInstance();
-    await p.setString('profile_name', result);
-    profileName.value = result;
+    if (ok != true) return;
+    // The app switches back to the register / login screen by itself.
+    await logoutAccount();
   }
 
   Future<void> _resetAll() async {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF0C3B31),
-        title: const Text('সব ডেটা মুছবেন?'),
-        content: const Text(
-            'বুকমার্ক, আমল ট্রাকার, কিতাবের তালিকা, API কী ও সেটিংস স্থায়ীভাবে মুছে যাবে।'),
+        backgroundColor: panelColor,
+        title: Text(tr('pf_reset_title')),
+        content: Text(tr('pf_reset_body')),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('না')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('no'))),
           TextButton(
               onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('হ্যাঁ, মুছুন', style: TextStyle(color: Color(0xFFF87171)))),
+              child: Text(tr('yes_delete'), style: const TextStyle(color: Color(0xFFF87171)))),
         ],
       ),
     );
@@ -143,8 +138,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
     await _load();
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('ডেটা মুছে ফেলা হয়েছে'), duration: Duration(seconds: 1)));
+          SnackBar(content: Text(tr('pf_deleted')), duration: const Duration(seconds: 1)));
     }
+    // Accounts were deleted too, so go back to register / login.
+    await resetAuthState();
   }
 
   @override
@@ -154,30 +151,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 10, 16, 120),
         children: [
-          const Text('প্রোফাইল', style: TextStyle(fontSize: 26, fontWeight: FontWeight.w700)),
+          Text(tr('profile'), style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w700)),
           const SizedBox(height: 16),
           ValueListenableBuilder<String>(
             valueListenable: profileName,
             builder: (_, name, __) => GlassCard(
               blur: 0,
               padding: const EdgeInsets.all(18),
-              onTap: _editName,
+              onTap: () => _go(const EditProfileScreen()),
               child: Row(
                 children: [
-                  CircleAvatar(
-                    radius: 32,
-                    backgroundColor: const Color(0xFFE91E63),
-                    child: Text(initialOf(name),
-                        style: const TextStyle(
-                            fontSize: 26, fontWeight: FontWeight.w800, color: Colors.white)),
-                  ),
+                  const UserAvatar(radius: 32, fontSize: 26),
                   const SizedBox(width: 16),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(name.isEmpty ? 'আপনার নাম দিন' : name,
+                        Text(name.isEmpty ? tr('pf_set_name') : name,
                             style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w700)),
+                        if ((currentAccount.value?.email ?? '').isNotEmpty) ...[
+                          const SizedBox(height: 2),
+                          Text(currentAccount.value!.email,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(fontSize: 13, color: wh(.7))),
+                        ],
                         const SizedBox(height: 4),
                         ValueListenableBuilder<int>(
                           valueListenable: cityIndex,
@@ -185,7 +183,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             children: [
                               const Icon(Icons.location_on_outlined, size: 16, color: kGold),
                               const SizedBox(width: 4),
-                              Text(kCities[c].name,
+                              Text(kCities[c].label,
                                   style: TextStyle(fontSize: 14, color: wh(.8))),
                             ],
                           ),
@@ -201,18 +199,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
           const SizedBox(height: 14),
           Row(
             children: [
-              Expanded(child: _Stat(Icons.checklist_rounded, bnDigits('$_amalToday/9'), 'আজকের আমল')),
+              Expanded(child: _Stat(Icons.checklist_rounded, bnDigits('$_amalToday/9'), tr('pf_today_amal'))),
               const SizedBox(width: 10),
               Expanded(
-                  child: _Stat(Icons.local_fire_department_rounded, bnDigits('$_streak'), 'দিনের ধারা')),
+                  child: _Stat(Icons.local_fire_department_rounded, bnDigits('$_streak'), tr('pf_streak'))),
             ],
           ),
           const SizedBox(height: 10),
           Row(
             children: [
-              Expanded(child: _Stat(Icons.bookmark_rounded, bnDigits('$_bookmarks'), 'বুকমার্ক')),
+              Expanded(child: _Stat(Icons.bookmark_rounded, bnDigits('$_bookmarks'), tr('pf_bookmarks'))),
               const SizedBox(width: 10),
-              Expanded(child: _Stat(Icons.library_books_rounded, bnDigits('$_booksDone'), 'কিতাব পড়া শেষ')),
+              Expanded(child: _Stat(Icons.library_books_rounded, bnDigits('$_booksDone'), tr('pf_books_done'))),
             ],
           ),
           if (_last != null) ...[
@@ -232,7 +230,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('শেষ পড়া সূরা', style: TextStyle(fontSize: 12.5, color: wh(.75))),
+                        Text(tr('pf_last_surah'), style: TextStyle(fontSize: 12.5, color: wh(.75))),
                         Text(_last!.transliteration,
                             style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
                       ],
@@ -244,15 +242,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ],
           const SizedBox(height: 22),
-          const Text('শর্টকাট', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w600)),
+          Text(tr('pf_shortcuts'), style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w600)),
           const SizedBox(height: 10),
-          _Tile(Icons.access_time_filled_rounded, 'নামাযের সময়', () => _go(const PrayerTimesScreen())),
-          _Tile(Icons.bookmark_border_rounded, 'কুরআনের বুকমার্ক', () => _go(const BookmarksScreen())),
-          _Tile(Icons.checklist_rounded, 'আমল ট্রাকার', () => _go(const AmalTrackerScreen())),
-          _Tile(Icons.headphones_rounded, 'গজল', () => _go(const GazalScreen())),
+          _Tile(Icons.access_time_filled_rounded, tr('f_prayer'), () => _go(const PrayerTimesScreen())),
+          _Tile(Icons.bookmark_border_rounded, tr('pf_quran_bm'), () => _go(const BookmarksScreen())),
+          _Tile(Icons.checklist_rounded, tr('f_amal'), () => _go(const AmalTrackerScreen())),
+          _Tile(Icons.headphones_rounded, tr('f_gazal'), () => _go(const GazalScreen())),
           const SizedBox(height: 18),
-          const Text('এলাকা (নামাযের সময়ের জন্য)',
-              style: TextStyle(fontSize: 19, fontWeight: FontWeight.w600)),
+          Text(tr('pf_area'),
+              style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w600)),
           const SizedBox(height: 10),
           ValueListenableBuilder<int>(
             valueListenable: cityIndex,
@@ -262,7 +260,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               children: [
                 for (int i = 0; i < kCities.length; i++)
                   ChoiceChip(
-                    label: Text(kCities[i].name),
+                    label: Text(kCities[i].label),
                     selected: i == sel,
                     onSelected: (_) => saveCity(i),
                   ),
@@ -270,20 +268,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ),
           const SizedBox(height: 22),
-          const Text('অ্যাপ', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w600)),
+          Text(tr('pf_app'), style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w600)),
           const SizedBox(height: 10),
-          _Tile(Icons.info_outline_rounded, 'নূর অ্যাপ সম্পর্কে', () {
-            showAboutDialog(
-              context: context,
-              applicationName: 'Noor',
-              applicationVersion: '1.0.0',
-              children: const [
-                Text('বাংলা ইসলামিক অ্যাপ।\n\nকুরআনের বাংলা অনুবাদ: মুহিউদ্দীন খান (tanzil.net)।'),
-              ],
-            );
-          }),
-          _Tile(Icons.delete_outline_rounded, 'সব ডেটা মুছুন', _resetAll,
+          _Tile(Icons.delete_outline_rounded, tr('pf_reset'), _resetAll,
               color: const Color(0xFFF87171)),
+          const SizedBox(height: 12),
+          Text(tr('pf_account'),
+              style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 10),
+          _Tile(Icons.edit_rounded, tr('pf_edit'), () => _go(const EditProfileScreen())),
+          _Tile(Icons.logout_rounded, tr('pf_logout'), _logout,
+              color: const Color(0xFFFB923C)),
         ],
       ),
     );

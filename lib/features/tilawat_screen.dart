@@ -1,3 +1,4 @@
+import '../i18n.dart';
 import 'package:flutter/material.dart';
 import '../quran/bookmarks_screen.dart';
 import '../quran/models.dart';
@@ -40,7 +41,7 @@ class _TilawatScreenState extends State<TilawatScreen> {
   @override
   Widget build(BuildContext context) {
     return GlassPage(
-      title: 'তিলাওয়াত',
+      title: tr('f_tilawat'),
       body: FutureBuilder<List<Surah>>(
         future: _future,
         builder: (context, snap) {

@@ -1,3 +1,4 @@
+import '../i18n.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../ui/glass.dart';
@@ -40,7 +41,7 @@ class HadithScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GlassPage(
-      title: 'হাদীস',
+      title: tr('f_hadith'),
       body: ListView.separated(
         padding: const EdgeInsets.fromLTRB(16, 6, 16, 24),
         itemCount: _hadiths.length + 1,

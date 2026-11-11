@@ -1,3 +1,4 @@
+import '../i18n.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../ui/glass.dart';
@@ -69,13 +70,13 @@ class _AmalTrackerScreenState extends State<AmalTrackerScreen> {
   @override
   Widget build(BuildContext context) {
     if (!_loaded) {
-      return const GlassPage(title: 'আমল ট্রাকার', body: Center(child: CircularProgressIndicator()));
+      return GlassPage(title: tr('f_amal'), body: const Center(child: CircularProgressIndicator()));
     }
     final total = _amals.length;
     final todayCount = _done[0].length;
 
     return GlassPage(
-      title: 'আমল ট্রাকার',
+      title: tr('f_amal'),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 6, 16, 24),
         children: [

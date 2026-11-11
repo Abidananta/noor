@@ -1,3 +1,4 @@
+import '../i18n.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../ui/glass.dart';
@@ -66,10 +67,10 @@ class _KitabScreenState extends State<KitabScreen> {
   @override
   Widget build(BuildContext context) {
     if (!_loaded) {
-      return const GlassPage(title: 'কিতাব', body: Center(child: CircularProgressIndicator()));
+      return GlassPage(title: tr('f_kitab'), body: const Center(child: CircularProgressIndicator()));
     }
     return GlassPage(
-      title: 'কিতাব',
+      title: tr('f_kitab'),
       body: ListView.separated(
         padding: const EdgeInsets.fromLTRB(16, 6, 16, 24),
         itemCount: _books.length + 1,
