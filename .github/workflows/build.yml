@@ -144,6 +144,13 @@ jobs:
           name: noor-app-apk
           path: build/app/outputs/flutter-apk/app-release.apk
 
+      # Same version re-built: remove the old Release and tag first, otherwise
+      # replacing the old APK asset fails with "Not Found".
+      - name: Remove old release of this version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release delete "v${{ steps.ver.outputs.short }}" --cleanup-tag --yes --repo "${{ github.repository }}" || true
+
       # Publishes the APK as a Release (tag v<version>). The app's
       # Settings -> "Update app" reads the latest Release.
       - uses: softprops/action-gh-release@v2
