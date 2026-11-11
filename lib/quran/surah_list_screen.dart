@@ -196,7 +196,6 @@ class _SurahListScreenState extends State<SurahListScreen> {
             );
           },
         )),
-            const QuranPlayerBar(),
           ],
         ),
       ),

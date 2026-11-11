@@ -94,6 +94,14 @@ class GazalEngine {
     await play(queue[n < 0 ? n + queue.length : n], queue);
   }
 
+  static Future<void> stop() async {
+    try {
+      await player.stop();
+    } catch (_) {}
+    current.value = null;
+    error.value = null;
+  }
+
   static Future<void> next() => step(1);
   static Future<void> prev() => step(-1);
 }
@@ -284,10 +292,6 @@ class _GazalScreenState extends State<GazalScreen> with WidgetsBindingObserver {
                         itemBuilder: (_, i) => _tile(all[i], all),
                       ),
           ),
-          ValueListenableBuilder<Track?>(
-            valueListenable: GazalEngine.current,
-            builder: (_, cur, __) => cur == null ? const SizedBox.shrink() : _nowPlaying(cur),
-          ),
         ],
       ),
     );
@@ -362,71 +366,6 @@ class _GazalScreenState extends State<GazalScreen> with WidgetsBindingObserver {
           ),
         );
       },
-    );
-  }
-
-  Widget _nowPlaying(Track cur) {
-    final maxMs = _dur.inMilliseconds < 1 ? 1.0 : _dur.inMilliseconds.toDouble();
-    final posMs = _pos.inMilliseconds.clamp(0, maxMs.toInt()).toDouble();
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-      child: GlassCard(
-        blur: 16,
-        radius: 24,
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(cur.title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
-            ValueListenableBuilder<String?>(
-              valueListenable: GazalEngine.error,
-              builder: (_, e, __) => e == null
-                  ? const SizedBox.shrink()
-                  : Padding(
-                      padding: const EdgeInsets.only(top: 4),
-                      child: Text(e,
-                          style: const TextStyle(fontSize: 12.5, color: Color(0xFFF87171))),
-                    ),
-            ),
-            Slider(
-              value: posMs,
-              max: maxMs,
-              activeColor: kGold,
-              onChanged: (v) => setState(() => _pos = Duration(milliseconds: v.round())),
-              onChangeEnd: (v) => GazalEngine.player.seek(Duration(milliseconds: v.round())),
-            ),
-            Row(
-              children: [
-                Text(_fmt(_pos), style: TextStyle(fontSize: 12, color: wh(.7))),
-                const Spacer(),
-                IconButton(
-                  iconSize: 32,
-                  icon: const Icon(Icons.skip_previous_rounded),
-                  onPressed: GazalEngine.prev,
-                ),
-                IconButton(
-                  iconSize: 44,
-                  color: kGold,
-                  icon: Icon(_state == PlayerState.playing
-                      ? Icons.pause_circle_filled_rounded
-                      : Icons.play_circle_fill_rounded),
-                  onPressed: GazalEngine.toggle,
-                ),
-                IconButton(
-                  iconSize: 32,
-                  icon: const Icon(Icons.skip_next_rounded),
-                  onPressed: GazalEngine.next,
-                ),
-                const Spacer(),
-                Text(_fmt(_dur), style: TextStyle(fontSize: 12, color: wh(.7))),
-              ],
-            ),
-          ],
-        ),
-      ),
     );
   }
 }

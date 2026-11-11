@@ -131,7 +131,6 @@ class _ReaderScreenState extends State<ReaderScreen> {
             );
           },
         )),
-            const QuranPlayerBar(),
           ],
         ),
       ),

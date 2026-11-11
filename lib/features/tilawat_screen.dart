@@ -2,6 +2,7 @@ import '../i18n.dart';
 import 'package:flutter/material.dart';
 import '../quran/bookmarks_screen.dart';
 import '../quran/models.dart';
+import '../quran/quran_audio.dart';
 import '../quran/reader_screen.dart';
 import '../quran/surah_list_screen.dart';
 import '../ui/glass.dart';
@@ -144,11 +145,13 @@ class _TilawatScreenState extends State<TilawatScreen> {
                           ),
                           Text(all[id - 1].name,
                               style: const TextStyle(fontSize: 22, color: kGold)),
+                          const SizedBox(width: 2),
+                          SurahPlayButton(surah: id),
                         ],
                       ),
                     ),
                   ),
-              const FootNote('অডিও তিলাওয়াত এই সংস্করণে নেই; এখানে পড়ার মাধ্যমে তিলাওয়াত করা যাবে।'),
+              const FootNote('ডান পাশের প্লে বাটনে ট্যাপ করে তিলাওয়াত শুনুন, অথবা সূরায় ট্যাপ করে পড়ুন।'),
             ],
           );
         },

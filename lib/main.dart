@@ -12,7 +12,7 @@ import 'features/prayer_times_screen.dart';
 import 'features/profile_screen.dart';
 import 'features/settings_screen.dart';
 import 'i18n.dart';
-import 'quran/quran_audio.dart';
+import 'player/global_player.dart';
 import 'splash.dart';
 import 'ui/glass.dart';
 
@@ -56,7 +56,7 @@ class NoorApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       builder: (context, child) => Directionality(
         textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
-        child: child ?? const SizedBox.shrink(),
+        child: PlayerHost(child: child ?? const SizedBox.shrink()),
       ),
       title: 'Noor',
       theme: ThemeData(
@@ -147,23 +147,19 @@ class _RootScreenState extends State<RootScreen> {
         backgroundColor: Colors.transparent,
         extendBody: true,
         body: SafeArea(bottom: false, child: pages[_index]),
-        bottomNavigationBar: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Small Quran player: shows on every tab while a surah is playing.
-            MediaQuery.removePadding(
-              context: context,
-              removeBottom: true,
-              child: const QuranPlayerBar(),
-            ),
-            _GlassNav(
-              index: _index,
-              onChanged: (i) => setState(() {
-                _index = i;
-                _lastTab = i;
-              }),
-            ),
-          ],
+        // While audio plays, the player takes the nav bar's place;
+        // closing the player brings the nav bar back.
+        bottomNavigationBar: AnimatedBuilder(
+          animation: playerChanges,
+          builder: (_, __) => playerActive()
+              ? const SizedBox.shrink()
+              : _GlassNav(
+                  index: _index,
+                  onChanged: (i) => setState(() {
+                    _index = i;
+                    _lastTab = i;
+                  }),
+                ),
         ),
       ),
     );
@@ -1140,7 +1136,7 @@ class _Grid extends StatelessWidget {
           crossAxisCount: 4,
           mainAxisSpacing: 10,
           crossAxisSpacing: 10,
-          mainAxisExtent: 122,
+          mainAxisExtent: 108,
         ),
         itemBuilder: (context, i) {
           final e = items[i];
@@ -1148,7 +1144,7 @@ class _Grid extends StatelessWidget {
             radius: 20,
             blur: 12,
             opacity: 0.10,
-            padding: const EdgeInsets.fromLTRB(3, 10, 3, 8),
+            padding: const EdgeInsets.fromLTRB(3, 9, 3, 6),
             onTap: () => e.open(context),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.start,
