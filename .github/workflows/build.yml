@@ -34,6 +34,26 @@ jobs:
           sed -i 's|<application|<uses-permission android:name="android.permission.INTERNET"/>\n    <application|' android/app/src/main/AndroidManifest.xml
           grep -n "INTERNET" android/app/src/main/AndroidManifest.xml
 
+      # Some plugins are compiled against an older Android SDK than their
+      # dependencies require; force every module to compileSdk 36.
+      - name: Force compileSdk 36 for all modules
+        run: |
+          mkdir -p ~/.gradle/init.d
+          cat > ~/.gradle/init.d/compilesdk.gradle <<'EOF2'
+          allprojects {
+              afterEvaluate { p ->
+                  def ext = p.extensions.findByName('android')
+                  if (ext != null) {
+                      try {
+                          ext.compileSdk = 36
+                      } catch (Throwable t) {
+                          ext.compileSdkVersion(36)
+                      }
+                  }
+              }
+          }
+          EOF2
+
       - run: flutter pub get
 
       - run: flutter build apk --release
