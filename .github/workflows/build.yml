@@ -28,6 +28,12 @@ jobs:
           cp -r tmp_app/android ./android
           rm -rf tmp_app
 
+      # Release builds need this for the AI chat and online gazal
+      - name: Add internet permission
+        run: |
+          sed -i 's|<application|<uses-permission android:name="android.permission.INTERNET"/>\n    <application|' android/app/src/main/AndroidManifest.xml
+          grep -n "INTERNET" android/app/src/main/AndroidManifest.xml
+
       - run: flutter pub get
 
       - run: flutter build apk --release
