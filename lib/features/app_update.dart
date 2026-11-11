@@ -7,17 +7,23 @@ import '../config.dart';
 class UpdateInfo {
   final String version;
   final String url; // APK download (or the release page)
-  const UpdateInfo(this.version, this.url);
+  final int size; // APK size in bytes (0 if unknown)
+  const UpdateInfo(this.version, this.url, [this.size = 0]);
+
+  bool get isApk => url.toLowerCase().endsWith('.apk');
 }
 
-/// 'owner/repo' typed in the app, else the one from config.dart.
+/// Repo from config.dart or the build (GitHub Actions passes its own repo),
+/// else one typed in the app earlier.
 Future<String> savedUpdateRepo() async {
+  if (kUpdateGithub.trim().isNotEmpty) return kUpdateGithub.trim();
+  if (kUpdateRepoBuild.trim().isNotEmpty) return kUpdateRepoBuild.trim();
   try {
     final p = await SharedPreferences.getInstance();
     final r = p.getString('update_repo') ?? '';
     if (r.trim().isNotEmpty) return r.trim();
   } catch (_) {}
-  return kUpdateGithub.trim();
+  return '';
 }
 
 /// Accepts 'owner/repo' or a github.com link; returns null if it is not valid.
@@ -50,16 +56,18 @@ Future<UpdateInfo> fetchLatestRelease(String repo) async {
     final j = jsonDecode(body) as Map<String, dynamic>;
     final tag = ((j['tag_name'] as String?) ?? '').trim().replaceFirst(RegExp(r'^[vV]'), '');
     String? url;
+    int size = 0;
     for (final a in (j['assets'] as List? ?? const [])) {
       final m = a as Map<String, dynamic>;
       if (((m['name'] as String?) ?? '').toLowerCase().endsWith('.apk')) {
         url = m['browser_download_url'] as String?;
+        size = (m['size'] as num?)?.toInt() ?? 0;
         break;
       }
     }
     url ??= j['html_url'] as String?;
     if (tag.isEmpty || url == null) throw const FormatException('no release data');
-    return UpdateInfo(tag, url);
+    return UpdateInfo(tag, url, size);
   } finally {
     client.close();
   }

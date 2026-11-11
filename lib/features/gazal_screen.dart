@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:audioplayers/audioplayers.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
@@ -286,33 +285,6 @@ class _GazalScreenState extends State<GazalScreen> with WidgetsBindingObserver {
         _userKey, jsonEncode(_mine.map((t) => {'title': t.title, 'path': t.ref}).toList()));
   }
 
-  Future<void> _addFromPhone() async {
-    try {
-      final res = await FilePicker.platform.pickFiles(type: FileType.audio, allowMultiple: true);
-      if (res == null) return;
-      final base = await getApplicationDocumentsDirectory();
-      final dir = Directory('${base.path}/gazal');
-      if (!await dir.exists()) await dir.create(recursive: true);
-      for (final f in res.files) {
-        final src = f.path;
-        if (src == null) continue;
-        final stamp = DateTime.now().millisecondsSinceEpoch;
-        final dest = '${dir.path}/${stamp}_${f.name}';
-        await File(src).copy(dest);
-        final dot = f.name.lastIndexOf('.');
-        final title = dot > 0 ? f.name.substring(0, dot) : f.name;
-        _mine.add(Track(title, tr('gz_mine'), 2, dest));
-      }
-      await _saveMine();
-      if (mounted) setState(() {});
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(tr('gz_fail_add'))));
-      }
-    }
-  }
-
   Future<void> _remove(Track t) async {
     if (GazalEngine.current.value == t) {
       await GazalEngine.player.stop();
@@ -350,11 +322,6 @@ class _GazalScreenState extends State<GazalScreen> with WidgetsBindingObserver {
           icon: const Icon(Icons.cloud_outlined),
           onPressed: _editSources,
         ),
-        IconButton(
-          tooltip: tr('gz_add_tip'),
-          icon: const Icon(Icons.library_add_rounded),
-          onPressed: _addFromPhone,
-        ),
       ],
       body: Column(
         children: [
@@ -391,12 +358,6 @@ class _GazalScreenState extends State<GazalScreen> with WidgetsBindingObserver {
             Text(tr('gz_empty'),
                 textAlign: TextAlign.center,
                 style: TextStyle(color: wh(.8), height: 1.5, fontSize: 15.5)),
-            const SizedBox(height: 18),
-            FilledButton.icon(
-              onPressed: _addFromPhone,
-              icon: const Icon(Icons.library_add_rounded),
-              label: Text(tr('gz_add')),
-            ),
           ],
         ),
       ),

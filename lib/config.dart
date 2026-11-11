@@ -26,9 +26,29 @@ const String kAppVersionFull = String.fromEnvironment('APP_VERSION', defaultValu
 String get kAppVersion => kAppVersionFull.split('+').first;
 String get kAppBuild => kAppVersionFull.contains('+') ? kAppVersionFull.split('+').last : '1';
 
-/// "Contact us" opens an email to this address.
+/// Developer credit shown on the About page.
+const String kDeveloperCredit = 'This App Developed By Ananta Abid';
+const String kDeveloperName = 'Ananta Abid';
+
+/// Inbox that receives messages from the in-app "Contact us" form.
+/// It is never shown anywhere in the UI.
 const String kContactEmail = 'anantaabid24@gmail.com';
+
+/// In-app mail (admin address stays hidden).
+///
+/// 1. Go to https://web3forms.com, enter [kContactEmail] and you get a free
+///    "Access Key" by email.
+/// 2. Paste it below. Messages are then delivered straight to that inbox
+///    without the user's mail app opening and without the address being shown.
+///
+/// While this is empty the form falls back to the phone's mail app.
+const String kContactAccessKey = '';
+const String kContactEndpoint = 'https://api.web3forms.com/submit';
 
 /// GitHub repo ('owner/repo') whose latest Release holds the newest APK.
 /// Leave empty and the app asks for it the first time "Update app" is tapped.
-const String kUpdateGithub = '';
+const String kUpdateGithub = 'Abidananta/noor';
+
+/// Set by the GitHub build (--dart-define=UPDATE_REPO=owner/repo) so the app
+/// knows where to look without asking.
+const String kUpdateRepoBuild = String.fromEnvironment('UPDATE_REPO', defaultValue: '');

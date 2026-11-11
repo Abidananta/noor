@@ -6,16 +6,19 @@ import 'auth/user_avatar.dart';
 import 'features/calendar_util.dart';
 import 'features/common.dart';
 import 'features/feature.dart';
+import 'features/notifications_screen.dart';
 import 'features/prayer_times_screen.dart';
 import 'features/profile_screen.dart';
 import 'features/settings_screen.dart';
 import 'i18n.dart';
+import 'splash.dart';
 import 'ui/glass.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await loadLang();
   loadCity();
+  loadNotifSeen();
   loadProfile();
   await loadTheme();
   await loadAuth();
@@ -63,7 +66,33 @@ class NoorApp extends StatelessWidget {
           centerTitle: true,
         ),
       ),
-      home: const AuthGate(),
+      home: const SplashGate(),
+    );
+  }
+}
+
+
+/// Plays the launch animation once per app start, then shows the app.
+class SplashGate extends StatefulWidget {
+  const SplashGate({super.key});
+
+  @override
+  State<SplashGate> createState() => _SplashGateState();
+}
+
+class _SplashGateState extends State<SplashGate> {
+  bool _done = splashPlayed;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 500),
+      child: _done
+          ? const AuthGate()
+          : NoorSplash(onFinished: () {
+              splashPlayed = true;
+              if (mounted) setState(() => _done = true);
+            }),
     );
   }
 }
@@ -192,7 +221,7 @@ class HomeScreen extends StatelessWidget {
         const SizedBox(height: 16),
         const _DateCard(),
         const SizedBox(height: 14),
-        const _PrayerCard(),
+        const _PrayerPager(),
         const SizedBox(height: 14),
         const BannerCarousel(),
         const SizedBox(height: 22),
@@ -211,39 +240,8 @@ class HomeScreen extends StatelessWidget {
 class _Header extends StatelessWidget {
   const _Header();
 
-  void _pickCity(BuildContext context) {
-    showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: panelColor,
-      builder: (ctx) => SafeArea(
-        child: ListView(
-          shrinkWrap: true,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-              child: Text(tr('pick_area'),
-                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
-            ),
-            for (int i = 0; i < kCities.length; i++)
-              ListTile(
-                title: Text(kCities[i].label),
-                trailing: i == cityIndex.value
-                    ? const Icon(Icons.check_rounded, color: kGold)
-                    : null,
-                onTap: () {
-                  saveCity(i);
-                  Navigator.pop(ctx);
-                },
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
-    final bd = DateTime.now().toUtc().add(const Duration(hours: 6));
     return Row(
       children: [
         Container(
@@ -254,19 +252,52 @@ class _Header extends StatelessWidget {
           ),
           child: const UserAvatar(radius: 21, fontSize: 16),
         ),
-        const SizedBox(width: 10),
-        _Pill(icon: Icons.calendar_month_outlined, text: shortDateBn(bd)),
         const Spacer(),
-        ValueListenableBuilder<int>(
-          valueListenable: cityIndex,
-          builder: (_, c, __) => _Pill(
-            icon: Icons.location_on_outlined,
-            text: kCities[c].label,
-            trailing: const Icon(Icons.keyboard_arrow_down, size: 20),
-            onTap: () => _pickCity(context),
-          ),
-        ),
+        const _BellButton(),
       ],
+    );
+  }
+}
+
+/// Notification bell with a small dot until today's notifications are opened.
+class _BellButton extends StatelessWidget {
+  const _BellButton();
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<String>(
+      valueListenable: notifSeenDay,
+      builder: (_, seen, __) {
+        final unread = seen != todayKey();
+        return Stack(
+          clipBehavior: Clip.none,
+          children: [
+            GlassCard(
+              radius: 24,
+              blur: 12,
+              opacity: 0.12,
+              padding: const EdgeInsets.all(11),
+              onTap: () => Navigator.push(
+                  context, MaterialPageRoute(builder: (_) => const NotificationsScreen())),
+              child: const Icon(Icons.notifications_none_rounded, size: 25, color: kGold),
+            ),
+            if (unread)
+              Positioned(
+                right: 4,
+                top: 4,
+                child: Container(
+                  width: 11,
+                  height: 11,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEF4444),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: 1.5),
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
     );
   }
 }
@@ -299,28 +330,357 @@ class _Pill extends StatelessWidget {
   }
 }
 
-class _DateCard extends StatelessWidget {
+/// Slides between the Bangla and the English date once a minute.
+class _DateCard extends StatefulWidget {
   const _DateCard();
+
+  @override
+  State<_DateCard> createState() => _DateCardState();
+}
+
+class _DateCardState extends State<_DateCard> {
+  final _controller = PageController();
+  Timer? _timer;
+  int _page = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(minutes: 1), (_) {
+      if (!mounted) return;
+      if (_controller.hasClients) {
+        _controller.animateToPage(1 - _page,
+            duration: const Duration(milliseconds: 600), curve: Curves.easeInOut);
+      }
+      setState(() {}); // also refreshes the date after midnight
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Widget _slide(String title, String sub) => Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(title,
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w600)),
+          ),
+          const SizedBox(height: 5),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(sub, style: TextStyle(fontSize: 13.5, color: wh(.72))),
+          ),
+        ],
+      );
 
   @override
   Widget build(BuildContext context) {
     final bd = DateTime.now().toUtc().add(const Duration(hours: 6));
     return GlassCard(
       blur: 18,
-      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+      padding: const EdgeInsets.fromLTRB(12, 14, 12, 10),
       child: SizedBox(
         width: double.infinity,
         child: Column(
           children: [
-            Text('${hijriBn(bd)} · ${weekdayBn(bd)} 🌙',
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w600)),
-            const SizedBox(height: 5),
-            // The Bangla (Bongabdo) calendar line only makes sense in Bangla.
-            if (appLang.value == 'bn')
-              Text(banglaDateBn(bd), style: TextStyle(fontSize: 13.5, color: wh(.72))),
+            SizedBox(
+              height: 56,
+              child: PageView(
+                controller: _controller,
+                onPageChanged: (i) => setState(() => _page = i),
+                children: [
+                  _slide('${hijriBn(bd, lang: 'bn')} · ${weekdayBn(bd, lang: 'bn')} 🌙',
+                      banglaDateBn(bd)),
+                  _slide('${hijriBn(bd, lang: 'en')} · ${weekdayBn(bd, lang: 'en')} 🌙',
+                      gregorianLong(bd, lang: 'en')),
+                ],
+              ),
+            ),
+            const SizedBox(height: 6),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                for (int i = 0; i < 2; i++)
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 250),
+                    margin: const EdgeInsets.symmetric(horizontal: 3),
+                    width: i == _page ? 16 : 6,
+                    height: 6,
+                    decoration: BoxDecoration(
+                      color: i == _page ? kGold : wh(.35),
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                  ),
+              ],
+            ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Swipe between the prayer card and the Ramadan countdown card.
+class _PrayerPager extends StatefulWidget {
+  const _PrayerPager();
+
+  @override
+  State<_PrayerPager> createState() => _PrayerPagerState();
+}
+
+class _PrayerPagerState extends State<_PrayerPager> {
+  int _page = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    final scale = MediaQuery.textScalerOf(context).scale(1.0);
+    final h = 268.0 + ((scale - 1.0).clamp(0.0, 0.6) * 90);
+    return Column(
+      children: [
+        SizedBox(
+          height: h,
+          child: PageView(
+            onPageChanged: (i) => setState(() => _page = i),
+            children: const [_PrayerCard(), _RamadanCard()],
+          ),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            for (int i = 0; i < 2; i++)
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 250),
+                margin: const EdgeInsets.symmetric(horizontal: 3),
+                width: i == _page ? 18 : 6,
+                height: 6,
+                decoration: BoxDecoration(
+                  color: i == _page ? kGold : wh(.35),
+                  borderRadius: BorderRadius.circular(3),
+                ),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+/// Countdown to the next Ramadan (or progress through the running one).
+class _RamadanCard extends StatefulWidget {
+  const _RamadanCard();
+
+  @override
+  State<_RamadanCard> createState() => _RamadanCardState();
+}
+
+class _RamadanCardState extends State<_RamadanCard> with SingleTickerProviderStateMixin {
+  Timer? _timer;
+  late final AnimationController _shine;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() {});
+    });
+    _shine = AnimationController(vsync: this, duration: const Duration(milliseconds: 2200))
+      ..repeat();
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _shine.dispose();
+    super.dispose();
+  }
+
+  Widget _tile(String value, String label) => Expanded(
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 4),
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          decoration: BoxDecoration(
+            color: wh(.10),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: wh(.18)),
+          ),
+          child: Column(children: [
+            Text(value, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w700, color: kGold)),
+            const SizedBox(height: 2),
+            Text(label, style: TextStyle(fontSize: 11.5, color: wh(.7))),
+          ]),
+        ),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    final bd = DateTime.now().toUtc().add(const Duration(hours: 6));
+    final r = ramadanInfo(bd);
+    final target = r.running ? r.end : r.start;
+    var left = target.difference(bd);
+    if (left.isNegative) left = Duration.zero;
+
+    final total = target.difference(r.from).inSeconds;
+    final done = bd.difference(r.from).inSeconds;
+    double frac = total <= 0 ? 0.0 : (done / total).clamp(0.0, 1.0).toDouble();
+    if (frac < 0.02) frac = 0.02;
+
+    final dd = left.inDays;
+    final hh = left.inHours % 24;
+    final mm = left.inMinutes % 60;
+    final ss = left.inSeconds % 60;
+    String two(int v) => localizeDigits(v.toString().padLeft(2, '0'));
+
+    final dateLine =
+        '${weekdayBn(r.start)}, ${gregorianLong(r.start)}';
+
+    return GlassCard(
+      blur: 20,
+      opacity: 0.13,
+      padding: EdgeInsets.zero,
+      child: Column(
+        children: [
+          SizedBox(
+            height: 140,
+            width: double.infinity,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(14, 14, 14, 10),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(children: [
+                        const Icon(Icons.nightlight_round, size: 20, color: kGold),
+                        const SizedBox(width: 8),
+                        Text(
+                            '${hijriMonthName(9)} ${localizeDigits('${r.year}')}',
+                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                      ]),
+                      if (r.running)
+                        Text(
+                            localizeDigits(trf('rm_day_of', {'d': '${r.dayOfRamadan}'})),
+                            style: TextStyle(fontSize: 13, color: wh(.75))),
+                    ],
+                  ),
+                  r.running
+                      ? Center(
+                          child: Text(localizeDigits(trf('rm_days_left', {'n': '$dd'})),
+                              style: const TextStyle(
+                                  fontSize: 30, fontWeight: FontWeight.w800, color: kGold)))
+                      : Row(children: [
+                          _tile(localizeDigits('$dd'), tr('rm_d')),
+                          _tile(two(hh), tr('rm_h')),
+                          _tile(two(mm), tr('rm_m')),
+                          _tile(two(ss), tr('rm_s')),
+                        ]),
+                  const SizedBox(height: 1),
+                ],
+              ),
+            ),
+          ),
+          Divider(height: 1, color: wh(.18)),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 14, 18, 16),
+            child: Column(
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Flexible(
+                      child: Text(r.running ? tr('rm_running') : tr('rm_start'),
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w600)),
+                    ),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                          r.running ? tr('rm_ends') : shortDateBn(r.start),
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 17, color: kGold)),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                // animated progress bar with a moving shine
+                SizedBox(
+                  height: 12,
+                  child: LayoutBuilder(builder: (context, c) {
+                    final w = c.maxWidth * frac;
+                    return Stack(children: [
+                      Container(
+                        decoration: BoxDecoration(
+                          color: wh(.16),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: SizedBox(
+                          width: w,
+                          height: 12,
+                          child: AnimatedBuilder(
+                            animation: _shine,
+                            builder: (_, __) => DecoratedBox(
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  colors: const [
+                                    Color(0xFF6EE7B7),
+                                    Color(0xFFF2C46D),
+                                    Color(0xFF6EE7B7),
+                                  ],
+                                  stops: const [0.0, 0.5, 1.0],
+                                  begin: Alignment(-1.0 + _shine.value * 2, 0),
+                                  end: Alignment(1.0 + _shine.value * 2, 0),
+                                  tileMode: TileMode.mirror,
+                                ),
+                                boxShadow: [
+                                  BoxShadow(color: kGold.withOpacity(.45), blurRadius: 8),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ]);
+                  }),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Row(children: [
+                        const Icon(Icons.circle, size: 11, color: kMint),
+                        const SizedBox(width: 6),
+                        Flexible(
+                          child: Text(r.running ? dateLine : tr('rm_approx'),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(color: kMint, fontSize: 13.5)),
+                        ),
+                      ]),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                        r.running
+                            ? ''
+                            : localizeDigits(trf('rm_days_left', {'n': '$dd'})),
+                        style: const TextStyle(fontSize: 15.5)),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -33,7 +33,8 @@ const _hMonths = <String, String>{
   'ms': 'Muharram|Safar|Rabiulawal|Rabiulakhir|Jamadilawal|Jamadilakhir|Rejab|Syaaban|Ramadan|Syawal|Zulkaedah|Zulhijjah',
 };
 
-List<String> _names(Map<String, String> m) => (m[appLang.value] ?? m['en']!).split('|');
+List<String> _names(Map<String, String> m, [String? lang]) =>
+    (m[lang ?? appLang.value] ?? m['en']!).split('|');
 
 const _bMonths = [
   'বৈশাখ', 'জ্যৈষ্ঠ', 'আষাঢ়', 'শ্রাবণ', 'ভাদ্র', 'আশ্বিন',
@@ -51,13 +52,17 @@ int _jdn(int y, int m, int d) {
   return d + (153 * m2 + 2) ~/ 5 + 365 * y2 + y2 ~/ 4 - y2 ~/ 100 + y2 ~/ 400 - 32045;
 }
 
-String weekdayBn(DateTime d) => _names(_weekdays)[d.weekday - 1];
+String weekdayBn(DateTime d, {String? lang}) => _names(_weekdays, lang)[d.weekday - 1];
+
+/// "11 November 2026" in [lang] (defaults to the app language).
+String gregorianLong(DateTime d, {String? lang}) =>
+    localizeDigits('${d.day} ${_names(_gMonths, lang)[d.month - 1]} ${d.year}', lang ?? appLang.value);
 
 /// "নভেম্বর ১১"
 String shortDateBn(DateTime d) => '${_names(_gMonths)[d.month - 1]} ${bnDigits('${d.day}')}';
 
-/// Tabular (arithmetical) Hijri date. Can differ by a day from local moon sighting.
-String hijriBn(DateTime d) {
+/// Tabular (arithmetical) Hijri date parts. Can differ by a day from local moon sighting.
+({int day, int month, int year}) hijriParts(DateTime d) {
   final jd = _jdn(d.year, d.month, d.day);
   var l = jd - 1948440 + 10632;
   final n = (l - 1) ~/ 10631;
@@ -67,8 +72,55 @@ String hijriBn(DateTime d) {
   final m = (24 * l) ~/ 709;
   final day = l - (709 * m) ~/ 24;
   final year = 30 * n + j - 30;
-  final mi = (m - 1).clamp(0, 11).toInt();
-  return bnDigits('$day ${_names(_hMonths)[mi]} $year ${tr('hijri_suffix')}');
+  return (day: day, month: m, year: year);
+}
+
+String hijriMonthName(int month, {String? lang}) =>
+    _names(_hMonths, lang)[(month - 1).clamp(0, 11).toInt()];
+
+String hijriBn(DateTime d, {String? lang}) {
+  final h = hijriParts(d);
+  final suffix = lang == null ? tr('hijri_suffix') : (lang == 'bn' ? 'হি.' : (lang == 'ar' ? 'هـ' : 'AH'));
+  return localizeDigits('${h.day} ${hijriMonthName(h.month, lang: lang)} ${h.year} $suffix',
+      lang ?? appLang.value);
+}
+
+/// Ramadan timing for the home-page countdown. All DateTimes are Bangladesh
+/// calendar dates at 00:00 (UTC-flagged, same convention as the rest of the app).
+class RamadanInfo {
+  final bool running; // today is inside Ramadan
+  final DateTime from; // bar start: 1 Shawwal of last year (or 1 Ramadan when running)
+  final DateTime start; // 1 Ramadan
+  final DateTime end; // 1 Shawwal after this Ramadan (only meaningful when running)
+  final int year; // Hijri year of that Ramadan
+  final int dayOfRamadan; // 1..30 when running
+  const RamadanInfo(this.running, this.from, this.start, this.end, this.year, this.dayOfRamadan);
+}
+
+RamadanInfo ramadanInfo(DateTime bd) {
+  const one = Duration(days: 1);
+  final today = DateTime.utc(bd.year, bd.month, bd.day);
+  final h = hijriParts(today);
+  if (h.month == 9) {
+    final start = today.subtract(Duration(days: h.day - 1));
+    var end = today;
+    for (int i = 0; i < 35 && hijriParts(end).month == 9; i++) {
+      end = end.add(one);
+    }
+    return RamadanInfo(true, start, start, end, h.year, h.day);
+  }
+  var next = today;
+  for (int i = 0; i < 400; i++) {
+    next = next.add(one);
+    if (hijriParts(next).month == 9) break;
+  }
+  var from = today;
+  for (int i = 0; i < 400; i++) {
+    final p = hijriParts(from);
+    if (p.month == 10 && p.day == 1) break;
+    from = from.subtract(one);
+  }
+  return RamadanInfo(false, from, next, next, hijriParts(next).year, 0);
 }
 
 /// Bangladesh revised Bangla calendar: "২৭ কার্তিক ১৪৩৩ বঙ্গাব্দ, হেমন্তকাল"
@@ -90,5 +142,5 @@ String banglaDateBn(DateTime d) {
     }
     off -= lens[i];
   }
-  return '${bnDigits('${off + 1}')} ${_bMonths[mi]} ${bnDigits('$by')} বঙ্গাব্দ, ${_bSeasons[mi]}';
+  return '${localizeDigits('${off + 1}', 'bn')} ${_bMonths[mi]} ${localizeDigits('$by', 'bn')} বঙ্গাব্দ, ${_bSeasons[mi]}';
 }
